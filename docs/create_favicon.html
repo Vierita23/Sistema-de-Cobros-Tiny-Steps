@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generar Favicon</title>
+</head>
+<body>
+    <canvas id="canvas" width="32" height="32" style="border: 1px solid #000;"></canvas>
+    <br>
+    <a id="download" download="favicon.ico">Descargar Favicon</a>
+    
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Fondo azul cyan
+        ctx.fillStyle = '#00BFFF';
+        ctx.fillRect(0, 0, 32, 32);
+        
+        // Texto "TS" estilizado con colores del logo
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#FF00FF';
+        ctx.fillText('T', 6, 12);
+        ctx.fillStyle = '#00FF00';
+        ctx.fillText('S', 18, 12);
+        
+        // Pequeño árbol
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(14, 20, 4, 6);
+        ctx.fillStyle = '#FF00FF';
+        ctx.beginPath();
+        ctx.arc(12, 18, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#00FF00';
+        ctx.beginPath();
+        ctx.arc(16, 18, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0000FF';
+        ctx.beginPath();
+        ctx.arc(20, 18, 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Convertir a favicon
+        const link = document.getElementById('download');
+        link.href = canvas.toDataURL('image/png');
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+

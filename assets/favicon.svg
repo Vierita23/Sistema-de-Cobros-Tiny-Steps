@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Fondo blanco -->
+  <rect width="64" height="64" fill="#FFFFFF" rx="8"/>
+  
+  <!-- Árbol simplificado -->
+  <!-- Tronco -->
+  <rect x="28" y="40" width="8" height="20" fill="#D2B48C" rx="2"/>
+  
+  <!-- Ramas -->
+  <line x1="30" y1="42" x2="20" y2="35" stroke="#D2B48C" stroke-width="2"/>
+  <line x1="34" y1="42" x2="44" y2="35" stroke="#D2B48C" stroke-width="2"/>
+  <line x1="32" y1="40" x2="32" y2="30" stroke="#D2B48C" stroke-width="2"/>
+  
+  <!-- Huellas de pies como hojas - colores del logo -->
+  <!-- Amarillo -->
+  <ellipse cx="18" cy="32" rx="2" ry="3" fill="#FFFF00" transform="rotate(-20 18 32)"/>
+  <ellipse cx="20" cy="30" rx="2" ry="3" fill="#FFFF00" transform="rotate(20 20 30)"/>
+  
+  <!-- Naranja -->
+  <ellipse cx="24" cy="30" rx="2" ry="3" fill="#FFA500" transform="rotate(-15 24 30)"/>
+  <ellipse cx="26" cy="28" rx="2" ry="3" fill="#FFA500" transform="rotate(15 26 28)"/>
+  
+  <!-- Verde -->
+  <ellipse cx="22" cy="26" rx="2" ry="3" fill="#00FF00" transform="rotate(-25 22 26)"/>
+  <ellipse cx="24" cy="24" rx="2" ry="3" fill="#00FF00" transform="rotate(25 24 24)"/>
+  
+  <!-- Rosa -->
+  <ellipse cx="28" cy="24" rx="2" ry="3" fill="#FF00FF" transform="rotate(-10 28 24)"/>
+  <ellipse cx="30" cy="22" rx="2" ry="3" fill="#FF00FF" transform="rotate(10 30 22)"/>
+  
+  <!-- Rojo -->
+  <ellipse cx="34" cy="28" rx="2" ry="3" fill="#FF0000" transform="rotate(-20 34 28)"/>
+  <ellipse cx="36" cy="26" rx="2" ry="3" fill="#FF0000" transform="rotate(20 36 26)"/>
+  
+  <!-- Azul -->
+  <ellipse cx="40" cy="30" rx="2" ry="3" fill="#0000FF" transform="rotate(-15 40 30)"/>
+  <ellipse cx="42" cy="28" rx="2" ry="3" fill="#0000FF" transform="rotate(15 42 28)"/>
+  
+  <!-- Columpio con niño (simplificado) -->
+  <line x1="20" y1="35" x2="20" y2="38" stroke="#0000FF" stroke-width="1.5"/>
+  <circle cx="20" cy="40" r="3" fill="#0000FF"/>
+  <rect x="18" y="40" width="4" height="4" fill="#0000FF" rx="1"/>
+  
+  <!-- Pájaro (simplificado) -->
+  <circle cx="26" cy="38" r="1.5" fill="#00BFFF"/>
+  <path d="M 24 38 L 26 36 L 28 38" stroke="#00BFFF" stroke-width="1" fill="none"/>
+  
+  <!-- Manzana (simplificado) -->
+  <circle cx="42" cy="32" r="2.5" fill="#FF00FF"/>
+  <path d="M 42 29 Q 43 28 44 29" stroke="#8B4513" stroke-width="0.8" fill="none"/>
+  
+  <!-- Texto "TS" con colores del logo -->
+  <text x="32" y="56" font-family="Arial, sans-serif" font-size="16" font-weight="900" text-anchor="middle" fill="#FF00FF">T</text>
+  <text x="40" y="56" font-family="Arial, sans-serif" font-size="16" font-weight="900" fill="#FFFF00">S</text>
+</svg>
+
