@@ -20,4 +20,7 @@ function getDBConnection() {
         die("Error: " . $e->getMessage());
     }
 }
+?>
+
+
 

@@ -1,6 +1,6 @@
-<nav class="sidebar">
-    <div class="sidebar-header">
-        <h2>
+<aside class="sidebar" id="sidebar" style="width: 250px; background: var(--white); box-shadow: 2px 0 10px rgba(0,0,0,0.1); padding: 20px 0; position: fixed; height: 100vh; left: 0; top: 0; z-index: 1000; overflow-y: auto;">
+    <div style="padding: 0 20px 30px 20px; border-bottom: 2px solid var(--gray-light); margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 1.5em; color: var(--primary);">
             <span style="color: #FF00FF;">T</span>
             <span style="color: #00FF00;">i</span>
             <span style="color: #0000FF;">n</span>
@@ -11,27 +11,59 @@
             <span style="color: #00BFFF;">p</span>
             <span style="color: #FF00FF;">s</span>
         </h2>
+        <p style="margin: 5px 0 0 0; color: var(--gray-dark); font-size: 0.85em; font-weight: 600;">Centro de Desarrollo Infantil</p>
+        <p style="margin: 5px 0 0 0; color: var(--primary); font-size: 0.75em; font-weight: 600;">Administrador</p>
     </div>
-    <ul class="sidebar-menu">
-        <li><a href="dashboard.php" class="<?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">Dashboard</a></li>
-        <li><a href="usuarios.php" class="<?php echo basename($_SERVER['PHP_SELF']) == 'usuarios.php' ? 'active' : ''; ?>">Usuarios</a></li>
-        <li><a href="ninos.php" class="<?php echo basename($_SERVER['PHP_SELF']) == 'ninos.php' ? 'active' : ''; ?>">Niños</a></li>
-        <li><a href="pagos.php" class="<?php echo basename($_SERVER['PHP_SELF']) == 'pagos.php' ? 'active' : ''; ?>">Pagos</a></li>
-    </ul>
-    <div class="sidebar-footer">
-        <button id="darkModeToggle" class="dark-mode-toggle" title="Modo Oscuro">
-            <span class="dark-mode-icon">🌙</span>
-            <span class="dark-mode-text">Modo Oscuro</span>
-        </button>
+    
+    <nav style="padding: 0 10px;">
+        <a href="dashboard.php" style="display: block; padding: 12px 20px; color: var(--dark); text-decoration: none; border-radius: 8px; margin-bottom: 5px; transition: all 0.3s ease; font-weight: 500;">
+            🏠 Dashboard
+        </a>
+        <a href="pagos.php" style="display: block; padding: 12px 20px; color: var(--dark); text-decoration: none; border-radius: 8px; margin-bottom: 5px; transition: all 0.3s ease; font-weight: 500;">
+            💰 Gestión de Pagos
+        </a>
+        <a href="usuarios.php" style="display: block; padding: 12px 20px; color: var(--dark); text-decoration: none; border-radius: 8px; margin-bottom: 5px; transition: all 0.3s ease; font-weight: 500;">
+            👥 Usuarios
+        </a>
+        <a href="ninos.php" style="display: block; padding: 12px 20px; color: var(--dark); text-decoration: none; border-radius: 8px; margin-bottom: 5px; transition: all 0.3s ease; font-weight: 500;">
+            👶 Niños
+        </a>
+    </nav>
+    
+    <div style="position: absolute; bottom: 20px; left: 0; right: 0; padding: 0 20px;">
+        <div style="padding: 15px; background: var(--light); border-radius: 8px; text-align: center;">
+            <p style="margin: 0 0 10px 0; font-size: 0.9em; color: var(--gray);"><?php echo htmlspecialchars($_SESSION['user_name']); ?></p>
+            <a href="../logout.php" style="display: block; padding: 8px; background: var(--error); color: white; text-decoration: none; border-radius: 6px; font-size: 0.9em; font-weight: 600;">
+            Cerrar Sesión
+        </a>
+        </div>
     </div>
-</nav>
+</aside>
 
+<style>
+.sidebar a:hover {
+    background: var(--light);
+    color: var(--primary);
+    transform: translateX(5px);
+}
 
+.sidebar a.active {
+    background: var(--primary);
+    color: white;
+}
 
-
-
-
-
-
-
-
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .sidebar.active {
+        transform: translateX(0);
+    }
+    
+    .main-content {
+        margin-left: 0 !important;
+    }
+}
+</style>

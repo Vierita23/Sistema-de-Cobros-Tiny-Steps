@@ -5,9 +5,11 @@ requirePadre();
 
 $conn = getDBConnection();
 $user_id = $_SESSION['user_id'];
+
+// Obtener ID del pago
 $pago_id = $_GET['id'] ?? 0;
 
-// Obtener información del pago (solo del usuario)
+// Obtener información del pago (solo del usuario actual)
 $stmt = $conn->prepare("SELECT p.*, n.nombre as nino_nombre 
                         FROM pagos p 
                         JOIN ninos n ON p.nino_id = n.id 
@@ -29,7 +31,7 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detalles del Pago | Tiny Steps</title>
+    <title>Detalles del Pago - Tiny Steps</title>
     <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
     <link rel="alternate icon" href="../assets/favicon.ico">
     <link rel="stylesheet" href="../assets/css/style.css">
@@ -44,7 +46,7 @@ $conn->close();
             <div class="header">
                 <h1>Detalles del Pago</h1>
                 <div class="user-info">
-                    <a href="pagos.php" class="btn btn-secondary">Volver a Pagos</a>
+                    <span>Bienvenido, <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
                     <a href="../logout.php" class="logout-btn">Cerrar Sesión</a>
                 </div>
             </div>
@@ -86,23 +88,24 @@ $conn->close();
                         <strong>Fecha de Verificación:</strong> <?php echo date('d/m/Y H:i', strtotime($pago['fecha_verificacion'])); ?>
                     </div>
                     <?php endif; ?>
-                    <?php if (isset($pago['motivo_pago']) && $pago['motivo_pago']): ?>
-                    <div>
-                        <strong>Motivo del Pago:</strong> 
-                        <span style="padding: 4px 12px; background: linear-gradient(135deg, rgba(255, 0, 255, 0.1) 0%, rgba(0, 191, 255, 0.1) 100%); color: var(--primary); border-radius: 5px; font-weight: 600;">
-                            <?php 
-                            $motivos = [
-                                'mensualidad' => 'Mensualidad',
-                                'atrasos' => 'Atrasos',
-                                'horas_adicionales' => 'Horas Adicionales',
-                                'otro' => 'Otro'
-                            ];
-                            echo htmlspecialchars($motivos[$pago['motivo_pago']] ?? ucfirst($pago['motivo_pago'])); 
-                            ?>
-                        </span>
-                    </div>
-                    <?php endif; ?>
                 </div>
+                
+                <?php if (isset($pago['motivo_pago']) && $pago['motivo_pago']): ?>
+                <div style="margin-bottom: 30px;">
+                    <strong>Motivo del Pago:</strong> 
+                    <span style="padding: 4px 12px; background: linear-gradient(135deg, rgba(255, 0, 255, 0.1) 0%, rgba(0, 191, 255, 0.1) 100%); color: var(--primary); border-radius: 5px; font-weight: 600;">
+                        <?php 
+                        $motivos = [
+                            'mensualidad' => 'Mensualidad',
+                            'atrasos' => 'Atrasos',
+                            'horas_adicionales' => 'Horas Adicionales',
+                            'otro' => 'Otro'
+                        ];
+                        echo htmlspecialchars($motivos[$pago['motivo_pago']] ?? ucfirst($pago['motivo_pago'])); 
+                        ?>
+                    </span>
+                </div>
+                <?php endif; ?>
                 
                 <?php if ($pago['descripcion']): ?>
                 <div style="margin-bottom: 30px;">
@@ -117,18 +120,14 @@ $conn->close();
                 <div style="margin-bottom: 30px;">
                     <strong>Comprobante de Pago:</strong>
                     <div style="margin-top: 15px;">
-                        <?php 
-                        $extension = strtolower(pathinfo($pago['comprobante_path'], PATHINFO_EXTENSION));
-                        if (in_array($extension, ['jpg', 'jpeg', 'png'])): ?>
-                            <img src="../<?php echo htmlspecialchars($pago['comprobante_path']); ?>" 
-                                 alt="Comprobante" 
-                                 style="max-width: 100%; max-height: 500px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                        <?php endif; ?>
+                        <img src="../<?php echo htmlspecialchars($pago['comprobante_path']); ?>" 
+                             alt="Comprobante" 
+                             style="max-width: 100%; max-height: 500px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                     </div>
                     <div style="margin-top: 15px;">
                         <a href="../<?php echo htmlspecialchars($pago['comprobante_path']); ?>" 
                            target="_blank" 
-                           class="btn btn-secondary">Abrir Comprobante</a>
+                           class="btn btn-secondary">Abrir en nueva ventana</a>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -142,25 +141,12 @@ $conn->close();
                 </div>
                 <?php endif; ?>
                 
-                <?php if ($pago['estado'] == 'rechazado'): ?>
-                <div class="alert alert-error">
-                    <strong>Pago Rechazado:</strong> Por favor, revisa las observaciones y sube un nuevo comprobante si es necesario.
+                <div class="form-actions">
+                    <a href="pagos.php" class="btn btn-secondary">Volver a Mis Pagos</a>
                 </div>
-                <?php elseif ($pago['estado'] == 'aceptado'): ?>
-                <div class="alert alert-success">
-                    <strong>Pago Aceptado:</strong> Tu pago ha sido verificado y aceptado por el administrador.
-                </div>
-                <?php else: ?>
-                <div class="alert alert-info">
-                    <strong>Pago Pendiente:</strong> Tu pago está siendo revisado por el administrador. Te notificaremos cuando sea verificado.
-                </div>
-                <?php endif; ?>
             </div>
         </div>
     </div>
     <script src="../assets/js/mobile-menu.js"></script>
-    <script src="../assets/js/dark-mode.js"></script>
 </body>
 </html>
-
-

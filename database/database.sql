@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS pagos (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
--- Insertar usuario admin por defecto (password: admin123)
+-- Insertar usuario admin por defecto (password: tinyvicentina789)
 INSERT INTO usuarios (nombre, email, password, tipo) VALUES 
-('Administrador', 'admin@tinysteps.com', '$2y$10$fZpGhbl1GnoEc.h0c5kmXOMQasDsc3rz8GuSjkK4kQZcORfRFymB6', 'admin');
+('Administrador', 'admin@tinysteps.com', '$2y$10$KaxOxSscagKtrC7W9XhK1.ToNaFvL3BGw6vtLAA6SztYQjX/W.Uge', 'admin');
 

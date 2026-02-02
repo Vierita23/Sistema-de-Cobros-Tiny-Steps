@@ -1,106 +1,64 @@
 <?php
 require_once '../config/database.php';
 require_once '../config/session.php';
-require_once '../config/validaciones.php';
 requirePadre();
 
 $conn = getDBConnection();
 $user_id = $_SESSION['user_id'];
 $mensaje = '';
+$error = '';
+
+// Información de cuentas bancarias
+$cuentas_bancarias = [
+    'Pichincha' => [
+        'nombre' => 'Mutualista Pichincha',
+        'tipo' => 'Ahorros',
+        'numero' => '20622558',
+        'color' => '#E65100',
+        'gradient' => 'linear-gradient(135deg, #FF6F00 0%, #E65100 100%)'
+    ],
+    'Bolivariano' => [
+        'nombre' => 'Banco Bolivariano',
+        'tipo' => 'Ahorros',
+        'numero' => '5001700105',
+        'color' => '#1565C0',
+        'gradient' => 'linear-gradient(135deg, #1976D2 0%, #1565C0 100%)'
+    ]
+];
 
 // Obtener niños del usuario
-$ninos = $conn->query("SELECT * FROM ninos WHERE usuario_id = $user_id AND activo = 1 ORDER BY nombre");
+$ninos_query = $conn->query("SELECT id, nombre FROM ninos WHERE usuario_id = $user_id AND activo = 1 ORDER BY nombre");
+$ninos = [];
+while ($row = $ninos_query->fetch_assoc()) {
+    $ninos[] = $row;
+}
 
-// Procesar subida de pago
+// Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['subir_pago'])) {
-    $nino_id = intval($_POST['nino_id'] ?? 0);
+    $nino_id = $_POST['nino_id'] ?? '';
     $monto = $_POST['monto'] ?? '';
-    $mes_pago = sanitizarInput($_POST['mes_pago'] ?? '');
-    $anio_pago = intval($_POST['anio_pago'] ?? 0);
-    $numero_cuenta = sanitizarInput($_POST['numero_cuenta'] ?? '');
+    $mes_pago = date('F'); // Mes actual automático
+    $anio_pago = $_POST['anio_pago'] ?? '';
+    $cuenta_destino = $_POST['cuenta_destino'] ?? ''; // Nueva variable para cuenta destino
     $es_deposito = isset($_POST['es_deposito']) ? 1 : 0;
-    $numero_comprobante = sanitizarInput($_POST['numero_comprobante'] ?? '');
+    $numero_comprobante = $_POST['numero_comprobante'] ?? '';
     $fecha_transaccion = $_POST['fecha_transaccion'] ?? '';
-    $motivo_pago = sanitizarInput($_POST['motivo_pago'] ?? '');
-    $descripcion = sanitizarInput($_POST['descripcion'] ?? '');
+    $motivo_pago = $_POST['motivo_pago'] ?? '';
+    $descripcion = $_POST['descripcion'] ?? '';
+    
+    // Convertir mes numérico a nombre
+    $meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    $mes_pago = $meses[date('n')];
     
     // Validaciones
-    $errores = [];
-    
-    if (empty($nino_id) || $nino_id <= 0) {
-        $errores[] = 'Debe seleccionar un niño';
-    }
-    
-    $validacion_monto = validarMonto($monto);
-    if (!$validacion_monto['valido']) {
-        $errores[] = $validacion_monto['mensaje'];
-    }
-    
-    if (empty($numero_cuenta)) {
-        $errores[] = 'Debe seleccionar una cuenta bancaria';
-    }
-    
-    if (empty($motivo_pago)) {
-        $errores[] = 'Debe seleccionar un motivo de pago';
-    } elseif (!in_array($motivo_pago, ['mensualidad', 'atrasos', 'horas_adicionales', 'otro'])) {
-        $errores[] = 'El motivo de pago seleccionado no es válido';
-    }
-    
-    // Si el motivo es "otro", la descripción es requerida
-    if ($motivo_pago === 'otro' && empty($descripcion)) {
-        $errores[] = 'Debe proporcionar una descripción cuando selecciona "Otro" como motivo';
-    }
-    
-    if (empty($fecha_transaccion)) {
-        $errores[] = 'La fecha de transacción es requerida';
+    if (empty($nino_id) || empty($monto) || empty($anio_pago) || empty($cuenta_destino)) {
+        $error = 'Por favor completa todos los campos obligatorios';
+    } elseif (!is_numeric($monto) || $monto <= 0) {
+        $error = 'El monto debe ser un número válido mayor a 0';
+    } elseif (!is_numeric($anio_pago) || $anio_pago < 2020 || $anio_pago > 2100) {
+        $error = 'El año debe ser válido';
     } else {
-        $validacion_fecha = validarFecha($fecha_transaccion, 'fecha de transacción');
-        if (!$validacion_fecha['valido']) {
-            $errores[] = $validacion_fecha['mensaje'];
-        }
-    }
-    
-    $validacion_descripcion = validarTexto($descripcion, 'descripción', 1000, false);
-    if (!$validacion_descripcion['valido']) {
-        $errores[] = $validacion_descripcion['mensaje'];
-    }
-    
-    if (!empty($numero_comprobante)) {
-        $validacion_comprobante = validarTexto($numero_comprobante, 'número de comprobante', 100, false);
-        if (!$validacion_comprobante['valido']) {
-            $errores[] = $validacion_comprobante['mensaje'];
-        }
-    }
-    
-    // Validar archivo si se subió
-    if (isset($_FILES['comprobante']) && $_FILES['comprobante']['error'] === UPLOAD_ERR_OK) {
-        $validacion_archivo = validarArchivo($_FILES['comprobante'], ['jpg', 'jpeg', 'png'], 100);
-        if (!$validacion_archivo['valido']) {
-            $errores[] = $validacion_archivo['mensaje'];
-        }
-    }
-    
-    // Determinar cuenta_bancaria basado en el número de cuenta seleccionado
-    $cuenta_bancaria = null;
-    if ($numero_cuenta) {
-        if (strpos($numero_cuenta, 'BOLIVARIANO') !== false || strpos($numero_cuenta, 'Bolivariano') !== false) {
-            $cuenta_bancaria = 'Bolivariano';
-        }
-    }
-    
-    // Verificar que el niño pertenece al usuario
-    $stmt = $conn->prepare("SELECT id FROM ninos WHERE id = ? AND usuario_id = ? AND activo = 1");
-    $stmt->bind_param("ii", $nino_id, $user_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows === 0) {
-        $errores[] = 'El niño seleccionado no es válido';
-    }
-    $stmt->close();
-    
-    if (empty($errores)) {
-        // Procesar archivo
+        // Procesar archivo de comprobante
         $comprobante_path = null;
         if (isset($_FILES['comprobante']) && $_FILES['comprobante']['error'] === UPLOAD_ERR_OK) {
             $upload_dir = '../uploads/comprobantes/';
@@ -108,120 +66,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['subir_pago'])) {
                 mkdir($upload_dir, 0777, true);
             }
             
-            // Verificar tamaño máximo (100MB)
-            $max_size = 100 * 1024 * 1024; // 100MB en bytes
-            if ($_FILES['comprobante']['size'] > $max_size) {
-                $mensaje = '<div class="alert alert-error">El archivo es demasiado grande. Tamaño máximo permitido: 100MB</div>';
-            } else {
-                $file_extension = strtolower(pathinfo($_FILES['comprobante']['name'], PATHINFO_EXTENSION));
-                $allowed_extensions = ['jpg', 'jpeg', 'png'];
-                
-                if (in_array($file_extension, $allowed_extensions)) {
+            $file_extension = strtolower(pathinfo($_FILES['comprobante']['name'], PATHINFO_EXTENSION));
+            $allowed_extensions = ['jpg', 'jpeg', 'png', 'pdf'];
+            
+            if (in_array($file_extension, $allowed_extensions)) {
                 $file_name = 'pago_' . $user_id . '_' . time() . '_' . uniqid() . '.' . $file_extension;
                 $file_path = $upload_dir . $file_name;
                 
                 if (move_uploaded_file($_FILES['comprobante']['tmp_name'], $file_path)) {
                     $comprobante_path = 'uploads/comprobantes/' . $file_name;
                 } else {
-                    $mensaje = '<div class="alert alert-error">Error al subir el archivo</div>';
+                    $error = 'Error al subir el comprobante';
                 }
-                } else {
-                    $mensaje = '<div class="alert alert-error">Formato de archivo no permitido. Use JPG o PNG</div>';
-                }
+            } else {
+                $error = 'Formato de archivo no permitido. Use: JPG, PNG o PDF';
             }
         }
         
-        if (!$mensaje) {
-            // Verificar qué campos existen en la tabla
-            $campos_disponibles = [];
-            $result_campos = $conn->query("SHOW COLUMNS FROM pagos");
-            while ($campo = $result_campos->fetch_assoc()) {
-                $campos_disponibles[] = $campo['Field'];
-            }
+        if (empty($error)) {
+            // Usar cuenta_destino como cuenta_bancaria en la base de datos
+            $cuenta_bancaria = $cuenta_destino;
             
-            // Construir la consulta dinámicamente según los campos disponibles
-            $campos = ['nino_id', 'usuario_id', 'monto', 'mes_pago', 'anio_pago'];
-            $valores = [$nino_id, $user_id, $monto, $mes_pago, $anio_pago];
-            $tipos = "iidss";
+            // Insertar pago en la base de datos
+            $stmt = $conn->prepare("INSERT INTO pagos (nino_id, usuario_id, monto, mes_pago, anio_pago, cuenta_bancaria, es_deposito, numero_comprobante, fecha_transaccion, motivo_pago, descripcion, comprobante_path, estado) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')");
             
-            if (in_array('cuenta_bancaria', $campos_disponibles)) {
-                $campos[] = 'cuenta_bancaria';
-                $valores[] = $cuenta_bancaria;
-                $tipos .= 's';
-            }
+            $fecha_transaccion_formatted = !empty($fecha_transaccion) ? $fecha_transaccion : null;
             
-            if (in_array('numero_cuenta', $campos_disponibles)) {
-                $campos[] = 'numero_cuenta';
-                $valores[] = $numero_cuenta;
-                $tipos .= 's';
-            }
-            
-            if (in_array('es_deposito', $campos_disponibles)) {
-                $campos[] = 'es_deposito';
-                $valores[] = $es_deposito;
-                $tipos .= 'i';
-            }
-            
-            if (in_array('numero_comprobante', $campos_disponibles)) {
-                $campos[] = 'numero_comprobante';
-                $valores[] = $numero_comprobante;
-                $tipos .= 's';
-            }
-            
-            if (in_array('fecha_transaccion', $campos_disponibles)) {
-                $campos[] = 'fecha_transaccion';
-                $valores[] = $fecha_transaccion ?: null;
-                $tipos .= 's';
-            }
-            
-            if (in_array('motivo_pago', $campos_disponibles)) {
-                $campos[] = 'motivo_pago';
-                $valores[] = $motivo_pago ?: null;
-                $tipos .= 's';
-            }
-            
-            if (in_array('descripcion', $campos_disponibles)) {
-                $campos[] = 'descripcion';
-                $valores[] = $descripcion;
-                $tipos .= 's';
-            }
-            
-            if (in_array('comprobante_path', $campos_disponibles)) {
-                $campos[] = 'comprobante_path';
-                $valores[] = $comprobante_path;
-                $tipos .= 's';
-            }
-            
-            // Construir la consulta SQL
-            $placeholders = str_repeat('?,', count($campos) - 1) . '?';
-            $sql = "INSERT INTO pagos (" . implode(', ', $campos) . ") VALUES ($placeholders)";
-            
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param($tipos, ...$valores);
+            $stmt->bind_param("iidssissssss", 
+                $nino_id, 
+                $user_id, 
+                $monto, 
+                $mes_pago, 
+                $anio_pago, 
+                $cuenta_bancaria, 
+                $es_deposito, 
+                $numero_comprobante, 
+                $fecha_transaccion_formatted, 
+                $motivo_pago, 
+                $descripcion, 
+                $comprobante_path
+            );
             
             if ($stmt->execute()) {
-                $pago_id = $conn->insert_id;
-                $mensaje = '<div class="alert alert-success">
-                    <strong>¡Pago subido exitosamente!</strong> El administrador lo revisará pronto.
-                </div>';
+                $mensaje = '<div class="alert alert-success">✅ Pago registrado exitosamente. Será revisado por el administrador.</div>';
                 // Limpiar formulario
-                $_POST = array();
+                $_POST = [];
+                $cuenta_destino = '';
             } else {
-                $mensaje = '<div class="alert alert-error">Error al registrar el pago: ' . $conn->error . '</div>';
+                $error = 'Error al registrar el pago: ' . $conn->error;
             }
             $stmt->close();
-        } else {
-            $mensaje = '<div class="alert alert-error"><strong>Errores de validación:</strong><ul style="margin-top: 10px; padding-left: 20px;">';
-            foreach ($errores as $error) {
-                $mensaje .= '<li>' . htmlspecialchars($error) . '</li>';
-            }
-            $mensaje .= '</ul></div>';
         }
     }
 }
-
-// Si hay nino_id en la URL, preseleccionarlo
-$nino_seleccionado = $_GET['nino_id'] ?? '';
 
 $conn->close();
 ?>
@@ -230,10 +128,198 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registrar Pago | Tiny Steps</title>
+    <title>Subir Nuevo Pago - Tiny Steps</title>
     <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
     <link rel="alternate icon" href="../assets/favicon.ico">
     <link rel="stylesheet" href="../assets/css/style.css">
+    <style>
+        .payment-form-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .bank-selection {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .bank-card {
+            background: var(--white);
+            border: 3px solid var(--gray-light);
+            border-radius: var(--border-radius-lg);
+            padding: 30px;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--box-shadow);
+        }
+        
+        .bank-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: var(--bank-gradient);
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+        
+        .bank-card.selected {
+            border-color: var(--bank-color);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            transform: translateY(-5px);
+        }
+        
+        .bank-card.selected::before {
+            transform: scaleX(1);
+        }
+        
+        .bank-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--box-shadow-lg);
+        }
+        
+        .bank-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 35px;
+            margin-bottom: 20px;
+            background: var(--bank-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .bank-name {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--dark);
+        }
+        
+        .bank-details {
+            color: var(--gray-dark);
+            font-size: 0.95em;
+            line-height: 1.8;
+        }
+        
+        .bank-account-number {
+            font-size: 1.3em;
+            font-weight: 800;
+            color: var(--bank-color);
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+        }
+        
+        .selected-bank-info {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border: 2px solid var(--primary);
+            border-radius: var(--border-radius-lg);
+            padding: 25px;
+            margin-bottom: 30px;
+            display: none;
+        }
+        
+        .selected-bank-info.active {
+            display: block;
+            animation: slideDown 0.4s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .form-section {
+            background: var(--white);
+            border-radius: var(--border-radius-lg);
+            padding: 35px;
+            margin-bottom: 25px;
+            box-shadow: var(--box-shadow-md);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .section-title {
+            font-size: 1.4em;
+            font-weight: 700;
+            margin-bottom: 25px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .file-upload-area {
+            border: 3px dashed var(--gray-light);
+            border-radius: var(--border-radius-lg);
+            padding: 40px;
+            text-align: center;
+            transition: var(--transition);
+            background: var(--light-gray);
+            cursor: pointer;
+        }
+        
+        .file-upload-area:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+        
+        .file-upload-area.dragover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+            transform: scale(1.02);
+        }
+        
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 15px;
+        }
+        
+        .upload-text {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 10px;
+        }
+        
+        .upload-hint {
+            color: var(--gray);
+            font-size: 0.9em;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .file-name-display {
+            margin-top: 15px;
+            padding: 12px;
+            background: var(--success-light);
+            border-radius: var(--border-radius);
+            color: var(--success);
+            font-weight: 600;
+            display: none;
+        }
+        
+        .file-name-display.active {
+            display: block;
+        }
+    </style>
 </head>
 <body>
     <button class="menu-toggle" id="menuToggle">☰</button>
@@ -243,190 +329,253 @@ $conn->close();
         
         <div class="main-content">
             <div class="header">
-                <h1>Subir Pago</h1>
+                <h1>💳 Subir Nuevo Pago</h1>
                 <div class="user-info">
-                    <a href="pagos.php" class="btn btn-secondary">Volver a Pagos</a>
+                    <span>Bienvenido, <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
                     <a href="../logout.php" class="logout-btn">Cerrar Sesión</a>
                 </div>
             </div>
             
-            <?php echo $mensaje; ?>
+            <?php if ($mensaje): ?>
+                <?php echo $mensaje; ?>
+            <?php endif; ?>
             
-            <div class="card">
-                <div class="card-header">
-                    <h2>Adicionar</h2>
+            <?php if ($error): ?>
+                <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
+            
+            <?php if (empty($ninos)): ?>
+                <div class="card">
+                    <div class="alert alert-warning">
+                        <strong>⚠️ No tienes niños registrados.</strong> Por favor contacta al administrador para registrar un niño.
+                    </div>
+                    <a href="dashboard.php" class="btn btn-secondary">Volver al Dashboard</a>
                 </div>
-                <form method="POST" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label for="nino_id">Niño</label>
-                        <select id="nino_id" name="nino_id" required>
-                            <option value="">Seleccionar niño...</option>
-                            <?php 
-                            $ninos->data_seek(0);
-                            while ($nino = $ninos->fetch_assoc()): ?>
-                                <option value="<?php echo $nino['id']; ?>" 
-                                        <?php echo $nino_seleccionado == $nino['id'] ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($nino['nombre']); ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="numero_cuenta">Cuenta</label>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <select id="numero_cuenta" name="numero_cuenta" required style="border: 2px solid #dc3545; flex: 1;">
-                                <option value="">------</option>
-                                <option value="1651106425 - BANCO BOLIVARIANO">1651106425 - Banco Bolivariano</option>
-                            </select>
-                            <img src="../assets/logo_bolivariano.png" alt="Banco Bolivariano" style="height: 50px; width: auto; object-fit: contain; max-width: 150px;" onerror="this.style.display='none'">
+            <?php else: ?>
+                <div class="payment-form-container">
+                    <!-- Selección de Banco Destino -->
+                    <div class="form-section">
+                        <div class="section-title">🏦 Selecciona la Cuenta de Destino *</div>
+                        <div class="bank-selection">
+                            <?php foreach ($cuentas_bancarias as $key => $cuenta): ?>
+                                <div class="bank-card" 
+                                     data-bank="<?php echo $key; ?>"
+                                     style="--bank-color: <?php echo $cuenta['color']; ?>; --bank-gradient: <?php echo $cuenta['gradient']; ?>">
+                                    <div class="bank-icon"><?php echo $key == 'Pichincha' ? '🏦' : '💼'; ?></div>
+                                    <div class="bank-name"><?php echo htmlspecialchars($cuenta['nombre']); ?></div>
+                                    <div class="bank-details">
+                                        <div><strong>Tipo:</strong> <?php echo htmlspecialchars($cuenta['tipo']); ?></div>
+                                        <div class="bank-account-number"><?php echo htmlspecialchars($cuenta['numero']); ?></div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
+                        
+                        <!-- Información de la cuenta seleccionada -->
+                        <div class="selected-bank-info" id="selectedBankInfo">
+                            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                                <span style="font-size: 2em;" id="selectedBankIcon">🏦</span>
+                                <div>
+                                    <div style="font-size: 1.3em; font-weight: 700; color: var(--dark);" id="selectedBankName"></div>
+                                    <div style="color: var(--gray); font-size: 0.9em;" id="selectedBankDetails"></div>
+                                </div>
+                            </div>
+                            <div style="padding: 15px; background: rgba(255, 255, 255, 0.7); border-radius: var(--border-radius); margin-top: 15px;">
+                                <strong>Número de Cuenta:</strong>
+                                <div style="font-size: 1.5em; font-weight: 800; color: var(--primary); font-family: 'Courier New', monospace; letter-spacing: 2px; margin-top: 5px;" id="selectedBankNumber"></div>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="cuenta_destino" id="cuenta_destino" value="<?php echo htmlspecialchars($_POST['cuenta_destino'] ?? ''); ?>" required>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="motivo_pago">Motivo del Pago</label>
-                        <select id="motivo_pago" name="motivo_pago" required>
-                            <option value="">Seleccionar motivo...</option>
-                            <option value="mensualidad">Mensualidad</option>
-                            <option value="atrasos">Atrasos</option>
-                            <option value="horas_adicionales">Horas Adicionales</option>
-                            <option value="otro">Otro</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group" id="descripcion_group">
-                        <label for="descripcion">Descripción</label>
-                        <textarea id="descripcion" name="descripcion" rows="4" placeholder="Describe detalles adicionales sobre el pago (opcional)"></textarea>
-                        <small style="color: #666; display: block; margin-top: 5px;">Opcional: Agrega información adicional sobre el pago</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Deposito</label>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <button type="button" id="btnDeposito" onclick="toggleDeposito()" class="btn btn-secondary" style="background: #2196F3; border-color: #2196F3; color: white; padding: 8px 20px;">
-                                Si
+                    <form method="POST" enctype="multipart/form-data" id="paymentForm">
+                        <input type="hidden" name="cuenta_destino" id="cuenta_destino_input" value="<?php echo htmlspecialchars($_POST['cuenta_destino'] ?? ''); ?>" required>
+                        
+                        <!-- Información del Pago -->
+                        <div class="form-section">
+                            <div class="section-title">📝 Información del Pago</div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="nino_id">👶 Niño *</label>
+                                    <select id="nino_id" name="nino_id" required>
+                                        <option value="">Seleccione un niño</option>
+                                        <?php foreach ($ninos as $nino): ?>
+                                            <option value="<?php echo $nino['id']; ?>" <?php echo (isset($_POST['nino_id']) && $_POST['nino_id'] == $nino['id']) ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($nino['nombre']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="monto">💰 Monto ($) *</label>
+                                    <input type="number" id="monto" name="monto" step="0.01" min="0.01" required 
+                                           value="<?php echo htmlspecialchars($_POST['monto'] ?? ''); ?>" placeholder="0.00">
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="anio_pago">📆 Año *</label>
+                                    <input type="number" id="anio_pago" name="anio_pago" min="2020" max="2100" required 
+                                           value="<?php echo htmlspecialchars($_POST['anio_pago'] ?? date('Y')); ?>" placeholder="<?php echo date('Y'); ?>">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="motivo_pago">🎯 Motivo del Pago</label>
+                                    <select id="motivo_pago" name="motivo_pago">
+                                        <option value="">Seleccione el motivo</option>
+                                        <option value="mensualidad" <?php echo (isset($_POST['motivo_pago']) && $_POST['motivo_pago'] == 'mensualidad') ? 'selected' : ''; ?>>Mensualidad</option>
+                                        <option value="atrasos" <?php echo (isset($_POST['motivo_pago']) && $_POST['motivo_pago'] == 'atrasos') ? 'selected' : ''; ?>>Atrasos</option>
+                                        <option value="horas_adicionales" <?php echo (isset($_POST['motivo_pago']) && $_POST['motivo_pago'] == 'horas_adicionales') ? 'selected' : ''; ?>>Horas Adicionales</option>
+                                        <option value="otro" <?php echo (isset($_POST['motivo_pago']) && $_POST['motivo_pago'] == 'otro') ? 'selected' : ''; ?>>Otro</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="numero_comprobante">📄 Número de Comprobante</label>
+                                    <input type="text" id="numero_comprobante" name="numero_comprobante" 
+                                           value="<?php echo htmlspecialchars($_POST['numero_comprobante'] ?? ''); ?>" 
+                                           placeholder="Número de comprobante de transferencia">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="fecha_transaccion">📅 Fecha de Transacción</label>
+                                    <input type="date" id="fecha_transaccion" name="fecha_transaccion" 
+                                           value="<?php echo htmlspecialchars($_POST['fecha_transaccion'] ?? ''); ?>">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label style="display: flex; align-items: center; gap: 10px;">
+                                    <input type="checkbox" name="es_deposito" value="1" 
+                                           <?php echo (isset($_POST['es_deposito']) && $_POST['es_deposito']) ? 'checked' : ''; ?>
+                                           style="width: auto; cursor: pointer;">
+                                    <span>Es depósito (si no está marcado, es transferencia)</span>
+                                </label>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="descripcion">📝 Descripción</label>
+                                <textarea id="descripcion" name="descripcion" rows="4" 
+                                          placeholder="Información adicional sobre el pago..."><?php echo htmlspecialchars($_POST['descripcion'] ?? ''); ?></textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- Comprobante -->
+                        <div class="form-section">
+                            <div class="section-title">📎 Comprobante de Pago *</div>
+                            
+                            <div class="file-upload-area" id="uploadArea">
+                                <div class="upload-icon">📤</div>
+                                <div class="upload-text">Arrastra tu comprobante aquí o haz clic para seleccionar</div>
+                                <div class="upload-hint">Formatos: JPG, PNG, PDF (Máx. 5MB)</div>
+                                <input type="file" id="comprobante" name="comprobante" accept="image/*,.pdf" required>
+                            </div>
+                            
+                            <div class="file-name-display" id="fileNameDisplay"></div>
+                        </div>
+                        
+                        <div class="form-actions" style="margin-top: 30px;">
+                            <button type="submit" name="subir_pago" class="btn btn-primary" style="font-size: 1.1em; padding: 15px 40px;">
+                                ✅ Registrar Pago
                             </button>
-                            <input type="hidden" id="es_deposito" name="es_deposito" value="1">
+                            <a href="pagos.php" class="btn btn-secondary" style="font-size: 1.1em; padding: 15px 40px;">Cancelar</a>
                         </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="monto">Valor</label>
-                        <input type="number" id="monto" name="monto" step="0.01" min="0" max="999999.99" required value="0.00" placeholder="0.00" onblur="validarMontoInput(this)">
-                        <small class="error-message" id="error_monto"></small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="numero_comprobante">No. Comprobante</label>
-                        <input type="text" id="numero_comprobante" name="numero_comprobante" placeholder="Ingrese el número de comprobante">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="fecha_transaccion">Fecha de transacción</label>
-                        <input type="date" id="fecha_transaccion" name="fecha_transaccion" value="<?php echo date('Y-m-d'); ?>" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Imagen del deposito</label>
-                        <div>
-                            <button type="button" onclick="document.getElementById('comprobante').click()" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; background: #2196F3; border-color: #2196F3;">
-                                <span>📎</span> Seleccionar
-                            </button>
-                            <input type="file" id="comprobante" name="comprobante" accept=".jpg,.jpeg,.png" onchange="previewFile(this)" style="display: none;">
-                            <div class="file-preview" id="filePreview" style="margin-top: 10px;"></div>
-                            <p style="font-size: 0.85em; color: #28a745; margin-top: 8px; font-weight: 600;">
-                                Tamaño máximo permitido 100Mb, en formato jpg, png
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Campos ocultos para compatibilidad -->
-                    <input type="hidden" name="mes_pago" value="<?php echo date('F'); ?>">
-                    <input type="hidden" name="anio_pago" value="<?php echo date('Y'); ?>">
-                    <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-                        <button type="submit" name="subir_pago" class="btn btn-primary" style="background: #28a745; border-color: #28a745;">Guardar</button>
-                        <a href="pagos.php" class="btn btn-secondary" style="background: #dc3545; border-color: #dc3545; color: white;">Cancelar</a>
-                    </div>
-                </form>
-            </div>
+                    </form>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
-    
+    <script src="../assets/js/mobile-menu.js"></script>
     <script>
-        function toggleDeposito() {
-            const btn = document.getElementById('btnDeposito');
-            const input = document.getElementById('es_deposito');
-            const isDeposito = input.value === '1';
-            
-            if (isDeposito) {
-                input.value = '0';
-                btn.textContent = 'No';
-                btn.style.background = '#dc3545';
-                btn.style.borderColor = '#dc3545';
-            } else {
-                input.value = '1';
-                btn.textContent = 'Si';
-                btn.style.background = '#2196F3';
-                btn.style.borderColor = '#2196F3';
+        const cuentasBancarias = <?php echo json_encode($cuentas_bancarias); ?>;
+        const bankCards = document.querySelectorAll('.bank-card');
+        const selectedBankInfo = document.getElementById('selectedBankInfo');
+        const cuentaDestinoInput = document.getElementById('cuenta_destino_input');
+        const paymentForm = document.getElementById('paymentForm');
+        
+        // Selección de banco
+        bankCards.forEach(card => {
+            card.addEventListener('click', function() {
+                const bankKey = this.dataset.bank;
+                
+                // Remover selección anterior
+                bankCards.forEach(c => c.classList.remove('selected'));
+                
+                // Agregar selección actual
+                this.classList.add('selected');
+                
+                // Actualizar input hidden
+                cuentaDestinoInput.value = bankKey;
+                
+                // Mostrar información de la cuenta seleccionada
+                const cuenta = cuentasBancarias[bankKey];
+                document.getElementById('selectedBankIcon').textContent = bankKey === 'Pichincha' ? '🏦' : '💼';
+                document.getElementById('selectedBankName').textContent = cuenta.nombre;
+                document.getElementById('selectedBankDetails').textContent = `Tipo: ${cuenta.tipo}`;
+                document.getElementById('selectedBankNumber').textContent = cuenta.numero;
+                document.getElementById('selectedBankNumber').style.color = cuenta.color;
+                
+                selectedBankInfo.classList.add('active');
+            });
+        });
+        
+        // Si hay un banco preseleccionado (después de error)
+        <?php if (isset($_POST['cuenta_destino']) && !empty($_POST['cuenta_destino'])): ?>
+            const preselectedBank = document.querySelector(`[data-bank="<?php echo htmlspecialchars($_POST['cuenta_destino']); ?>"]`);
+            if (preselectedBank) {
+                preselectedBank.click();
+            }
+        <?php endif; ?>
+        
+        // Upload de archivo
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('comprobante');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileName();
+            }
+        });
+        
+        fileInput.addEventListener('change', updateFileName);
+        
+        function updateFileName() {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameDisplay.textContent = `📎 Archivo seleccionado: ${file.name}`;
+                fileNameDisplay.classList.add('active');
             }
         }
         
-        function previewFile(input) {
-            const preview = document.getElementById('filePreview');
-            preview.innerHTML = '';
-            
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-                const maxSize = 100 * 1024 * 1024; // 100MB
-                
-                if (file.size > maxSize) {
-                    alert('El archivo es demasiado grande. Tamaño máximo: 100MB');
-                    input.value = '';
-                    return;
-                }
-                
-                const reader = new FileReader();
-                
-                if (file.type.startsWith('image/')) {
-                    reader.onload = function(e) {
-                        const img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.style.maxWidth = '300px';
-                        img.style.maxHeight = '300px';
-                        img.style.borderRadius = '8px';
-                        img.style.marginTop = '10px';
-                        preview.appendChild(img);
-                        preview.innerHTML += '<p style="margin-top: 10px; color: #666; font-size: 0.9em;">' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)</p>';
-                    };
-                    reader.readAsDataURL(file);
-                }
-            }
-        }
-    </script>
-    <script src="../assets/js/mobile-menu.js"></script>
-    <script src="../assets/js/validaciones.js"></script>
-    <script src="../assets/js/dark-mode.js"></script>
-    <script>
-        // Mostrar/ocultar descripción según el motivo seleccionado
-        document.addEventListener('DOMContentLoaded', function() {
-            const motivoSelect = document.getElementById('motivo_pago');
-            const descripcionGroup = document.getElementById('descripcion_group');
-            const descripcionTextarea = document.getElementById('descripcion');
-            
-            if (motivoSelect && descripcionGroup) {
-                motivoSelect.addEventListener('change', function() {
-                    if (this.value === 'otro') {
-                        descripcionTextarea.placeholder = 'Por favor, describe el motivo del pago';
-                        descripcionTextarea.setAttribute('required', 'required');
-                    } else {
-                        descripcionTextarea.placeholder = 'Describe detalles adicionales sobre el pago (opcional)';
-                        descripcionTextarea.removeAttribute('required');
-                    }
-                });
+        // Validación del formulario
+        paymentForm.addEventListener('submit', function(e) {
+            if (!cuentaDestinoInput.value) {
+                e.preventDefault();
+                alert('Por favor selecciona la cuenta de destino');
+                return false;
             }
         });
     </script>
 </body>
 </html>
-
-

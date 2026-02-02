@@ -58,26 +58,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#667eea">
     <title>Iniciar Sesión | Tiny Steps - Sistema de Gestión</title>
     <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
     <link rel="alternate icon" href="assets/favicon.ico">
     <link rel="stylesheet" href="assets/css/style.css">
+    <style>
+        /* Soporte universal para emojis - Compatible con Apple, Android, Windows */
+        body, html {
+            font-family: -apple-system, BlinkMacSystemFont, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "Android Emoji", "EmojiSymbols", "EmojiOne Mozilla", "Twemoji Mozilla", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .logo-title span {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "Android Emoji", -apple-system, BlinkMacSystemFont, sans-serif;
+            font-variant-emoji: emoji;
+            -webkit-font-feature-settings: "liga", "kern";
+            font-feature-settings: "liga", "kern";
+            text-rendering: optimizeLegibility;
+        }
+    </style>
 </head>
 <body class="login-page">
     <div class="login-container">
         <div class="login-box">
             <div class="logo-section">
                 <h1 class="logo-title">
-                    <span style="color: #FF00FF;">T</span>
-                    <span style="color: #00FF00;">i</span>
-                    <span style="color: #0000FF;">n</span>
-                    <span style="color: #FF0000;">y</span>
-                    <span style="color: #FFFF00;">S</span>
-                    <span style="color: #00FF00;">t</span>
-                    <span style="color: #FF0000;">e</span>
-                    <span style="color: #00BFFF;">p</span>
-                    <span style="color: #FF00FF;">s</span>
+                    <span>T</span>
+                    <span>i</span>
+                    <span>n</span>
+                    <span>y</span>
+                    <span>S</span>
+                    <span>t</span>
+                    <span>e</span>
+                    <span>p</span>
+                    <span>s</span>
                 </h1>
                 <p class="logo-subtitle">Centro de Desarrollo Infantil</p>
             </div>
