@@ -49,6 +49,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt->close();
         }
+    } elseif (isset($_POST['eliminar_usuario'])) {
+        $id = $_POST['id'] ?? 0;
+        $current_user_id = $_SESSION['user_id'];
+        
+        if ($id > 0 && $id != $current_user_id) {
+            // Verificar si el usuario tiene niños o pagos asociados
+            $stmt_ninos = $conn->prepare("SELECT COUNT(*) as total FROM ninos WHERE usuario_id = ?");
+            $stmt_ninos->bind_param("i", $id);
+            $stmt_ninos->execute();
+            $ninos_result = $stmt_ninos->get_result();
+            $ninos_count = $ninos_result->fetch_assoc()['total'];
+            $stmt_ninos->close();
+            
+            $stmt_pagos = $conn->prepare("SELECT COUNT(*) as total FROM pagos WHERE usuario_id = ?");
+            $stmt_pagos->bind_param("i", $id);
+            $stmt_pagos->execute();
+            $pagos_result = $stmt_pagos->get_result();
+            $pagos_count = $pagos_result->fetch_assoc()['total'];
+            $stmt_pagos->close();
+            
+            if ($ninos_count > 0 || $pagos_count > 0) {
+                $error = 'No se puede eliminar el usuario porque tiene ' . 
+                        ($ninos_count > 0 ? "$ninos_count niño(s) " : '') . 
+                        ($pagos_count > 0 ? "y $pagos_count pago(s) " : '') . 
+                        'asociados. Primero elimine o reasigne estos registros.';
+            } else {
+                $stmt = $conn->prepare("DELETE FROM usuarios WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                
+                if ($stmt->execute()) {
+                    $mensaje = '<div class="alert alert-success">Usuario eliminado exitosamente</div>';
+                } else {
+                    $error = 'Error al eliminar usuario: ' . $conn->error;
+                }
+                $stmt->close();
+            }
+        } else {
+            $error = 'No puedes eliminar tu propio usuario o el ID es inválido';
+        }
     }
 }
 
@@ -169,6 +208,12 @@ $conn->close();
                                         </td>
                                         <td>
                                             <a href="editar_usuario.php?id=<?php echo $usuario['id']; ?>" class="btn btn-sm btn-primary">Editar</a>
+                                            <?php if ($usuario['id'] != $_SESSION['user_id']): ?>
+                                                <form method="POST" style="display: inline-block; margin-left: 5px;" onsubmit="return confirm('¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.');">
+                                                    <input type="hidden" name="id" value="<?php echo $usuario['id']; ?>">
+                                                    <button type="submit" name="eliminar_usuario" class="btn btn-sm btn-danger">Eliminar</button>
+                                                </form>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endwhile; ?>

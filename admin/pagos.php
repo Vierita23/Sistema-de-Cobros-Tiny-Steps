@@ -4,6 +4,49 @@ require_once '../config/session.php';
 requireAdmin();
 
 $conn = getDBConnection();
+$mensaje = '';
+$error = '';
+
+// Procesar acciones
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['eliminar_pago'])) {
+        $id = $_POST['id'] ?? 0;
+        
+        if ($id > 0) {
+            // Obtener información del pago para eliminar el archivo si existe
+            $stmt_info = $conn->prepare("SELECT comprobante_path FROM pagos WHERE id = ?");
+            $stmt_info->bind_param("i", $id);
+            $stmt_info->execute();
+            $pago_result = $stmt_info->get_result();
+            
+            if ($pago_result && $pago_result->num_rows > 0) {
+                $pago_data = $pago_result->fetch_assoc();
+                $comprobante_path = $pago_data['comprobante_path'];
+                $stmt_info->close();
+                
+                // Eliminar el registro de la base de datos
+                $stmt = $conn->prepare("DELETE FROM pagos WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                
+                if ($stmt->execute()) {
+                    // Intentar eliminar el archivo físico si existe
+                    if ($comprobante_path && file_exists('../' . $comprobante_path)) {
+                        @unlink('../' . $comprobante_path);
+                    }
+                    $mensaje = '<div class="alert alert-success">Pago eliminado exitosamente</div>';
+                } else {
+                    $error = 'Error al eliminar pago: ' . $conn->error;
+                }
+                $stmt->close();
+            } else {
+                $error = 'Pago no encontrado';
+                $stmt_info->close();
+            }
+        } else {
+            $error = 'ID inválido';
+        }
+    }
+}
 
 // Obtener todos los pagos
 $query = "SELECT p.*, n.nombre as nino_nombre, u.nombre as usuario_nombre, u.email as usuario_email 
@@ -37,6 +80,14 @@ $conn->close();
                     <a href="../logout.php" class="logout-btn">Cerrar Sesión</a>
                 </div>
             </div>
+            
+            <?php if ($mensaje): ?>
+                <?php echo $mensaje; ?>
+            <?php endif; ?>
+            
+            <?php if ($error): ?>
+                <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
             
             <div class="card">
                 <div class="card-header">
@@ -89,6 +140,10 @@ $conn->close();
                                         </td>
                                         <td>
                                             <a href="ver_pago.php?id=<?php echo $pago['id']; ?>" class="btn btn-sm btn-primary">Verificar</a>
+                                            <form method="POST" style="display: inline-block; margin-left: 5px;" onsubmit="return confirm('¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer y eliminará también el comprobante asociado.');">
+                                                <input type="hidden" name="id" value="<?php echo $pago['id']; ?>">
+                                                <button type="submit" name="eliminar_pago" class="btn btn-sm btn-danger">Eliminar</button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endwhile; ?>

@@ -5,7 +5,18 @@ requireAdmin();
 
 $conn = getDBConnection();
 
-// Obtener estadísticas generales
+// Obtener mes y año seleccionados (por defecto mes actual)
+$mes_seleccionado = isset($_GET['mes']) ? (int)$_GET['mes'] : (int)date('n');
+$anio_seleccionado = isset($_GET['anio']) ? (int)$_GET['anio'] : (int)date('Y');
+
+// Nombres de los meses
+$meses = [
+    1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+    5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+    9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre'
+];
+
+// Obtener estadísticas generales (totales de todos los tiempos)
 $stats_query = $conn->query("SELECT 
     (SELECT COUNT(*) FROM usuarios WHERE activo = 1) as total_usuarios,
     (SELECT COUNT(*) FROM ninos WHERE activo = 1) as total_ninos,
@@ -15,6 +26,36 @@ $stats_query = $conn->query("SELECT
     (SELECT COUNT(*) FROM pagos WHERE estado = 'rechazado') as pagos_rechazados,
     (SELECT SUM(monto) FROM pagos WHERE estado = 'aceptado') as total_recaudado");
 $stats = $stats_query->fetch_assoc();
+
+// Obtener estadísticas del mes seleccionado
+$stats_mes_query = $conn->query("SELECT 
+    COUNT(*) as total_pagos_mes,
+    SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as pagos_pendientes_mes,
+    SUM(CASE WHEN estado = 'aceptado' THEN 1 ELSE 0 END) as pagos_aceptados_mes,
+    SUM(CASE WHEN estado = 'rechazado' THEN 1 ELSE 0 END) as pagos_rechazados_mes,
+    SUM(CASE WHEN estado = 'aceptado' THEN monto ELSE 0 END) as total_recaudado_mes
+    FROM pagos 
+    WHERE mes_pago = '" . $mes_seleccionado . "' 
+    AND anio_pago = " . $anio_seleccionado);
+$stats_mes = $stats_mes_query->fetch_assoc();
+
+// Obtener años disponibles (años en los que hay pagos)
+$anios_result = $conn->query("SELECT DISTINCT anio_pago FROM pagos ORDER BY anio_pago DESC");
+$anios_array = [];
+while ($row = $anios_result->fetch_assoc()) {
+    $anios_array[] = (int)$row['anio_pago'];
+}
+// Obtener año actual
+$anio_actual = (int)date('Y');
+$anio_maximo = 2040;
+// Agregar año actual y años futuros hasta 2040 si no están en la lista
+for ($anio = $anio_actual; $anio <= $anio_maximo; $anio++) {
+    if (!in_array($anio, $anios_array)) {
+        $anios_array[] = $anio;
+    }
+}
+// Ordenar de forma descendente (más reciente primero)
+rsort($anios_array);
 
 // Obtener últimos pagos
 $ultimos_pagos = $conn->query("SELECT p.*, n.nombre as nino_nombre, u.nombre as usuario_nombre 
@@ -244,8 +285,61 @@ $conn->close();
         <div class="main-content">
             <!-- Banner de Bienvenida -->
             <div class="welcome-banner">
-                <div class="welcome-title">👋 Bienvenido, <?php echo htmlspecialchars($_SESSION['user_name']); ?></div>
-                <div class="welcome-subtitle">Panel de Control Administrativo - Gestión Completa del Sistema</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+                    <div>
+                        <div class="welcome-title">👋 Bienvenido, <?php echo htmlspecialchars($_SESSION['user_name']); ?></div>
+                        <div class="welcome-subtitle">Panel de Control Administrativo - Gestión Completa del Sistema</div>
+                    </div>
+                    <div style="text-align: right; background: rgba(255,255,255,0.12); padding: 12px 20px; border-radius: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+                        <div id="fecha-actual" style="font-size: 0.95em; font-weight: 500; opacity: 0.95; margin-bottom: 4px;">
+                            <?php 
+                            setlocale(LC_TIME, 'es_ES.UTF-8', 'es_ES', 'spanish');
+                            $fecha_completa = strftime('%A, %d de %B de %Y', time());
+                            echo ucfirst($fecha_completa);
+                            ?>
+                        </div>
+                        <div id="hora-actual" style="font-size: 1.1em; font-weight: 600; opacity: 1;">
+                            <?php echo date('H:i:s'); ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filtro de Mes/Año para Recaudación -->
+            <div class="card" style="margin-bottom: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div style="padding: 25px;">
+                    <h2 style="margin: 0 0 20px 0; color: white; font-size: 1.5em;">📅 Ver Recaudación por Mes</h2>
+                    <form method="GET" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; opacity: 0.9;">Mes:</label>
+                            <select name="mes" style="width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 1em; background: white; color: #333;" onchange="this.form.submit()">
+                                <?php for ($i = 1; $i <= 12; $i++): ?>
+                                    <option value="<?php echo $i; ?>" <?php echo $mes_seleccionado == $i ? 'selected' : ''; ?>>
+                                        <?php echo $meses[$i]; ?>
+                                    </option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; opacity: 0.9;">Año:</label>
+                            <select name="anio" style="width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 1em; background: white; color: #333;" onchange="this.form.submit()">
+                                <?php foreach ($anios_array as $anio): ?>
+                                    <option value="<?php echo $anio; ?>" <?php echo $anio_seleccionado == $anio ? 'selected' : ''; ?>>
+                                        <?php echo $anio; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: flex-end; gap: 10px;">
+                            <button type="submit" class="btn" style="background: white; color: #667eea; padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                                🔍 Filtrar
+                            </button>
+                            <a href="dashboard.php" class="btn" style="background: rgba(255,255,255,0.2); color: white; padding: 12px 24px; border: 2px solid white; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block;">
+                                📊 Ver Todo
+                            </a>
+                        </div>
+                    </form>
+                </div>
             </div>
             
             <!-- Estadísticas Principales -->
@@ -266,22 +360,32 @@ $conn->close();
                 
                 <div class="stat-card" style="--stat-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); --stat-icon-bg: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); --stat-icon-color: white;">
                     <div class="stat-card-icon">⏳</div>
-                    <div class="stat-card-label">Pagos Pendientes</div>
-                    <div class="stat-card-value"><?php echo $stats['pagos_pendientes'] ?? 0; ?></div>
-                    <div class="stat-card-trend">⚠ Requieren revisión</div>
+                    <div class="stat-card-label">Pagos Pendientes (<?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>)</div>
+                    <div class="stat-card-value"><?php echo $stats_mes['pagos_pendientes_mes'] ?? 0; ?></div>
+                    <div class="stat-card-trend">⚠ Requieren revisión este mes</div>
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); font-size: 0.85em; opacity: 0.8;">
+                        Total General: <?php echo $stats['pagos_pendientes'] ?? 0; ?>
+                    </div>
                 </div>
                 
                 <div class="stat-card" style="--stat-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); --stat-icon-bg: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); --stat-icon-color: white;">
                     <div class="stat-card-icon">💰</div>
-                    <div class="stat-card-label">Total Recaudado</div>
-                    <div class="stat-card-value" style="font-size: 2.2em;">$<?php echo number_format($stats['total_recaudado'] ?? 0, 2); ?></div>
-                    <div class="stat-card-trend">✓ Pagos aceptados</div>
+                    <div class="stat-card-label">Total Recaudado (<?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>)</div>
+                    <div class="stat-card-value" style="font-size: 2.2em;">$<?php echo number_format($stats_mes['total_recaudado_mes'] ?? 0, 2); ?></div>
+                    <div class="stat-card-trend">
+                        ✓ <?php echo $stats_mes['pagos_aceptados_mes'] ?? 0; ?> pago(s) aceptado(s) este mes
+                    </div>
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); font-size: 0.85em; opacity: 0.8;">
+                        Total General: $<?php echo number_format($stats['total_recaudado'] ?? 0, 2); ?>
+                    </div>
                 </div>
             </div>
             
             <!-- Gráfico de Estado de Pagos -->
             <div class="chart-container">
-                <h2 style="margin: 0 0 25px 0; font-size: 1.8em; font-weight: 700; color: var(--dark);">📊 Distribución de Pagos</h2>
+                <h2 style="margin: 0 0 25px 0; font-size: 1.8em; font-weight: 700; color: var(--dark);">
+                    📊 Distribución de Pagos - <?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>
+                </h2>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px;">
                     <div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -291,29 +395,49 @@ $conn->close();
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: <?php echo $porcentaje_aceptados; ?>%; background: linear-gradient(135deg, #10B981 0%, #059669 100%);"></div>
                         </div>
-                        <div style="margin-top: 5px; font-size: 0.9em; color: var(--gray);"><?php echo $stats['pagos_aceptados'] ?? 0; ?> pagos</div>
+                        <div style="margin-top: 5px; font-size: 0.9em; color: var(--gray);">
+                            <?php echo $stats_mes['pagos_aceptados_mes'] ?? 0; ?> pagos este mes
+                            <span style="opacity: 0.6;">(Total: <?php echo $stats['pagos_aceptados'] ?? 0; ?>)</span>
+                        </div>
                     </div>
                     
                     <div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                             <span style="font-weight: 600; color: var(--warning);">⏳ Pendientes</span>
-                            <span style="font-weight: 700; color: var(--dark);"><?php echo $porcentaje_pendientes; ?>%</span>
+                            <span style="font-weight: 700; color: var(--dark);">
+                                <?php 
+                                $total_mes = $stats_mes['total_pagos_mes'] ?? 1;
+                                $porcentaje_pendientes_mes = $total_mes > 0 ? round(($stats_mes['pagos_pendientes_mes'] / $total_mes) * 100) : 0;
+                                echo $porcentaje_pendientes_mes; 
+                                ?>%
+                            </span>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: <?php echo $porcentaje_pendientes; ?>%; background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);"></div>
+                            <div class="progress-fill" style="width: <?php echo $porcentaje_pendientes_mes; ?>%; background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);"></div>
                         </div>
-                        <div style="margin-top: 5px; font-size: 0.9em; color: var(--gray);"><?php echo $stats['pagos_pendientes'] ?? 0; ?> pagos</div>
+                        <div style="margin-top: 5px; font-size: 0.9em; color: var(--gray);">
+                            <?php echo $stats_mes['pagos_pendientes_mes'] ?? 0; ?> pagos este mes
+                            <span style="opacity: 0.6;">(Total: <?php echo $stats['pagos_pendientes'] ?? 0; ?>)</span>
+                        </div>
                     </div>
                     
                     <div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                             <span style="font-weight: 600; color: var(--error);">✗ Rechazados</span>
-                            <span style="font-weight: 700; color: var(--dark);"><?php echo $porcentaje_rechazados; ?>%</span>
+                            <span style="font-weight: 700; color: var(--dark);">
+                                <?php 
+                                $porcentaje_rechazados_mes = $total_mes > 0 ? round(($stats_mes['pagos_rechazados_mes'] / $total_mes) * 100) : 0;
+                                echo $porcentaje_rechazados_mes; 
+                                ?>%
+                            </span>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: <?php echo $porcentaje_rechazados; ?>%; background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);"></div>
+                            <div class="progress-fill" style="width: <?php echo $porcentaje_rechazados_mes; ?>%; background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);"></div>
                         </div>
-                        <div style="margin-top: 5px; font-size: 0.9em; color: var(--gray);"><?php echo $stats['pagos_rechazados'] ?? 0; ?> pagos</div>
+                        <div style="margin-top: 5px; font-size: 0.9em; color: var(--gray);">
+                            <?php echo $stats_mes['pagos_rechazados_mes'] ?? 0; ?> pagos este mes
+                            <span style="opacity: 0.6;">(Total: <?php echo $stats['pagos_rechazados'] ?? 0; ?>)</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -397,6 +521,48 @@ $conn->close();
     </div>
     <script src="../assets/js/mobile-menu.js"></script>
     <script>
+        // Función para formatear fecha en español
+        function formatearFecha(fecha) {
+            const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+            const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                          'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+            
+            const diaSemana = dias[fecha.getDay()];
+            const dia = fecha.getDate();
+            const mes = meses[fecha.getMonth()];
+            const año = fecha.getFullYear();
+            
+            return diaSemana + ', ' + dia + ' de ' + mes + ' de ' + año;
+        }
+        
+        // Función para formatear hora
+        function formatearHora(fecha) {
+            const horas = String(fecha.getHours()).padStart(2, '0');
+            const minutos = String(fecha.getMinutes()).padStart(2, '0');
+            const segundos = String(fecha.getSeconds()).padStart(2, '0');
+            return horas + ':' + minutos + ':' + segundos;
+        }
+        
+        // Actualizar fecha y hora automáticamente
+        function actualizarFechaHora() {
+            const ahora = new Date();
+            const fechaElement = document.getElementById('fecha-actual');
+            const horaElement = document.getElementById('hora-actual');
+            
+            if (fechaElement) {
+                fechaElement.textContent = formatearFecha(ahora);
+            }
+            if (horaElement) {
+                horaElement.textContent = formatearHora(ahora);
+            }
+        }
+        
+        // Actualizar cada segundo
+        setInterval(actualizarFechaHora, 1000);
+        
+        // Actualizar inmediatamente al cargar
+        actualizarFechaHora();
+        
         // Animación de entrada para las cards
         document.addEventListener('DOMContentLoaded', function() {
             const cards = document.querySelectorAll('.stat-card, .quick-action-card');

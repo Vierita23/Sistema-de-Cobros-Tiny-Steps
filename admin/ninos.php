@@ -45,6 +45,218 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt->close();
         }
+    } elseif (isset($_POST['eliminar_nino'])) {
+        $id = $_POST['id'] ?? 0;
+        
+        if ($id > 0) {
+            // Verificar si el niño tiene pagos asociados
+            $stmt_check = $conn->prepare("SELECT COUNT(*) as total FROM pagos WHERE nino_id = ?");
+            $stmt_check->bind_param("i", $id);
+            $stmt_check->execute();
+            $pagos_result = $stmt_check->get_result();
+            $pagos_count = $pagos_result->fetch_assoc()['total'];
+            $stmt_check->close();
+            
+            if ($pagos_count > 0) {
+                $error = "No se puede eliminar el niño porque tiene $pagos_count pago(s) asociado(s). Primero elimine estos pagos.";
+            } else {
+                // Iniciar transacción para asegurar integridad
+                $conn->begin_transaction();
+                
+                try {
+                    // Eliminar el niño
+                    $stmt = $conn->prepare("DELETE FROM ninos WHERE id = ?");
+                    $stmt->bind_param("i", $id);
+                    
+                    if (!$stmt->execute()) {
+                        throw new Exception('Error al eliminar niño: ' . $conn->error);
+                    }
+                    $stmt->close();
+                    
+                    // Reordenar los IDs de los niños restantes
+                    // Desactivar temporalmente las claves foráneas
+                    $conn->query("SET FOREIGN_KEY_CHECKS = 0");
+                    
+                    // Obtener todos los niños ordenados por fecha de registro
+                    $ninos_restantes = $conn->query("SELECT id FROM ninos ORDER BY fecha_registro ASC");
+                    $nuevo_id = 1;
+                    $ids_a_actualizar = [];
+                    
+                    // Identificar qué IDs necesitan actualizarse
+                    while ($nino = $ninos_restantes->fetch_assoc()) {
+                        $old_id = $nino['id'];
+                        if ($old_id != $nuevo_id) {
+                            $ids_a_actualizar[$old_id] = $nuevo_id;
+                        }
+                        $nuevo_id++;
+                    }
+                    
+                    // Ordenar por ID descendente para evitar conflictos al actualizar
+                    krsort($ids_a_actualizar);
+                    
+                    // Actualizar los IDs que necesitan cambio (de mayor a menor para evitar conflictos)
+                    foreach ($ids_a_actualizar as $old_id => $new_id) {
+                        // Usar un ID temporal alto para evitar conflictos
+                        $temp_id = 999999 + $old_id;
+                        
+                        // Primero mover a ID temporal
+                        $stmt_temp = $conn->prepare("UPDATE ninos SET id = ? WHERE id = ?");
+                        $stmt_temp->bind_param("ii", $temp_id, $old_id);
+                        $stmt_temp->execute();
+                        $stmt_temp->close();
+                        
+                        // Actualizar referencias en pagos
+                        $stmt_update_pagos = $conn->prepare("UPDATE pagos SET nino_id = ? WHERE nino_id = ?");
+                        $stmt_update_pagos->bind_param("ii", $temp_id, $old_id);
+                        $stmt_update_pagos->execute();
+                        $stmt_update_pagos->close();
+                    }
+                    
+                    // Ahora actualizar de ID temporal al ID final
+                    foreach ($ids_a_actualizar as $old_id => $new_id) {
+                        $temp_id = 999999 + $old_id;
+                        
+                        // Actualizar referencias en pagos al ID final
+                        $stmt_update_pagos = $conn->prepare("UPDATE pagos SET nino_id = ? WHERE nino_id = ?");
+                        $stmt_update_pagos->bind_param("ii", $new_id, $temp_id);
+                        $stmt_update_pagos->execute();
+                        $stmt_update_pagos->close();
+                        
+                        // Actualizar el ID del niño al ID final
+                        $stmt_update_nino = $conn->prepare("UPDATE ninos SET id = ? WHERE id = ?");
+                        $stmt_update_nino->bind_param("ii", $new_id, $temp_id);
+                        $stmt_update_nino->execute();
+                        $stmt_update_nino->close();
+                    }
+                    
+                    // Reactivar las claves foráneas
+                    $conn->query("SET FOREIGN_KEY_CHECKS = 1");
+                    
+                    // Actualizar el AUTO_INCREMENT para que el próximo ID sea correcto
+                    $max_id_result = $conn->query("SELECT COALESCE(MAX(id), 0) as max_id FROM ninos");
+                    $max_id = $max_id_result->fetch_assoc()['max_id'];
+                    $conn->query("ALTER TABLE ninos AUTO_INCREMENT = " . ($max_id + 1));
+                    
+                    // Confirmar transacción
+                    $conn->commit();
+                    
+                    $mensaje = '<div class="alert alert-success">Niño eliminado exitosamente. Los IDs han sido reordenados automáticamente.</div>';
+                    
+                } catch (Exception $e) {
+                    // Revertir transacción en caso de error
+                    $conn->rollback();
+                    $conn->query("SET FOREIGN_KEY_CHECKS = 1"); // Asegurar que se reactive
+                    $error = 'Error al eliminar y reordenar: ' . $e->getMessage();
+                }
+            }
+        } else {
+            $error = 'ID inválido';
+        }
+    }
+}
+
+// Función para reordenar todos los IDs de niños
+function reordenarIdsNinos($conn) {
+    $conn->begin_transaction();
+    
+    try {
+        // Desactivar temporalmente las claves foráneas
+        $conn->query("SET FOREIGN_KEY_CHECKS = 0");
+        
+        // Obtener todos los niños ordenados por fecha de registro
+        $ninos_restantes = $conn->query("SELECT id FROM ninos ORDER BY fecha_registro ASC");
+        $nuevo_id = 1;
+        $ids_a_actualizar = [];
+        
+        // Identificar qué IDs necesitan actualizarse
+        while ($nino = $ninos_restantes->fetch_assoc()) {
+            $old_id = $nino['id'];
+            if ($old_id != $nuevo_id) {
+                $ids_a_actualizar[$old_id] = $nuevo_id;
+            }
+            $nuevo_id++;
+        }
+        
+        // Si hay IDs que actualizar
+        if (count($ids_a_actualizar) > 0) {
+            // Ordenar por ID descendente para evitar conflictos al actualizar
+            krsort($ids_a_actualizar);
+            
+            // Actualizar los IDs que necesitan cambio (de mayor a menor para evitar conflictos)
+            foreach ($ids_a_actualizar as $old_id => $new_id) {
+                // Usar un ID temporal alto para evitar conflictos
+                $temp_id = 999999 + $old_id;
+                
+                // Primero mover a ID temporal
+                $stmt_temp = $conn->prepare("UPDATE ninos SET id = ? WHERE id = ?");
+                $stmt_temp->bind_param("ii", $temp_id, $old_id);
+                $stmt_temp->execute();
+                $stmt_temp->close();
+                
+                // Actualizar referencias en pagos
+                $stmt_update_pagos = $conn->prepare("UPDATE pagos SET nino_id = ? WHERE nino_id = ?");
+                $stmt_update_pagos->bind_param("ii", $temp_id, $old_id);
+                $stmt_update_pagos->execute();
+                $stmt_update_pagos->close();
+            }
+            
+            // Ahora actualizar de ID temporal al ID final
+            foreach ($ids_a_actualizar as $old_id => $new_id) {
+                $temp_id = 999999 + $old_id;
+                
+                // Actualizar referencias en pagos al ID final
+                $stmt_update_pagos = $conn->prepare("UPDATE pagos SET nino_id = ? WHERE nino_id = ?");
+                $stmt_update_pagos->bind_param("ii", $new_id, $temp_id);
+                $stmt_update_pagos->execute();
+                $stmt_update_pagos->close();
+                
+                // Actualizar el ID del niño al ID final
+                $stmt_update_nino = $conn->prepare("UPDATE ninos SET id = ? WHERE id = ?");
+                $stmt_update_nino->bind_param("ii", $new_id, $temp_id);
+                $stmt_update_nino->execute();
+                $stmt_update_nino->close();
+            }
+        }
+        
+        // Reactivar las claves foráneas
+        $conn->query("SET FOREIGN_KEY_CHECKS = 1");
+        
+        // Actualizar el AUTO_INCREMENT para que el próximo ID sea correcto
+        $max_id_result = $conn->query("SELECT COALESCE(MAX(id), 0) as max_id FROM ninos");
+        $max_id = $max_id_result->fetch_assoc()['max_id'];
+        $conn->query("ALTER TABLE ninos AUTO_INCREMENT = " . ($max_id + 1));
+        
+        // Confirmar transacción
+        $conn->commit();
+        return true;
+    } catch (Exception $e) {
+        // Revertir transacción en caso de error
+        $conn->rollback();
+        $conn->query("SET FOREIGN_KEY_CHECKS = 1");
+        return false;
+    }
+}
+
+// Verificar si los IDs están desordenados y reordenarlos automáticamente
+$primer_id_check = $conn->query("SELECT MIN(id) as min_id FROM ninos");
+$primer_id_check_result = $primer_id_check->fetch_assoc();
+$min_id_actual = $primer_id_check_result['min_id'] ?? 0;
+
+// Si el primer ID no es 1 y hay niños, reordenar automáticamente
+if ($min_id_actual > 1 && $min_id_actual > 0) {
+    if (reordenarIdsNinos($conn)) {
+        $mensaje = '<div class="alert alert-success">IDs reordenados automáticamente. Ahora empiezan desde el número 1.</div>';
+    } else {
+        $error = 'Error al reordenar los IDs automáticamente.';
+    }
+}
+
+// También permitir reordenamiento manual
+if (isset($_GET['reordenar_ids']) && $_GET['reordenar_ids'] == '1') {
+    if (reordenarIdsNinos($conn)) {
+        $mensaje = '<div class="alert alert-success">IDs reordenados exitosamente. Ahora empiezan desde el número 1.</div>';
+    } else {
+        $error = 'Error al reordenar los IDs.';
     }
 }
 
@@ -53,6 +265,15 @@ $ninos = $conn->query("SELECT n.*, u.nombre as usuario_nombre, u.email as usuari
                       FROM ninos n 
                       JOIN usuarios u ON n.usuario_id = u.id 
                       ORDER BY n.fecha_registro DESC");
+
+// Obtener el total de niños activos
+$total_ninos_query = $conn->query("SELECT COUNT(*) as total FROM ninos WHERE activo = 1");
+$total_ninos = $total_ninos_query->fetch_assoc()['total'];
+
+// Verificar si los IDs están desordenados (si el primer ID no es 1)
+$primer_id_query = $conn->query("SELECT MIN(id) as min_id FROM ninos");
+$primer_id = $primer_id_query->fetch_assoc()['min_id'];
+$ids_desordenados = ($primer_id > 1);
 
 // Obtener usuarios para el select
 $usuarios = $conn->query("SELECT id, nombre, email FROM usuarios WHERE tipo = 'padre' AND activo = 1 ORDER BY nombre");
@@ -127,8 +348,18 @@ $conn->close();
             
             <!-- Lista de niños -->
             <div class="card">
-                <div class="card-header">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <h2>Lista de Niños</h2>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 1.1em;">
+                            Total: <?php echo $total_ninos; ?> niño(s) activo(s)
+                        </div>
+                        <?php if ($ids_desordenados): ?>
+                            <a href="?reordenar_ids=1" class="btn btn-primary" onclick="return confirm('¿Deseas reordenar todos los IDs para que empiecen desde el número 1? Esto actualizará todas las referencias.');" style="padding: 8px 16px; font-size: 0.9em;">
+                                🔄 Reordenar IDs (Empezar desde 1)
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -164,6 +395,10 @@ $conn->close();
                                         </td>
                                         <td>
                                             <a href="pagos_nino.php?id=<?php echo $nino['id']; ?>" class="btn btn-sm btn-secondary">Ver Pagos</a>
+                                            <form method="POST" style="display: inline-block; margin-left: 5px;" onsubmit="return confirm('¿Estás seguro de que deseas eliminar este niño? Esta acción no se puede deshacer.');">
+                                                <input type="hidden" name="id" value="<?php echo $nino['id']; ?>">
+                                                <button type="submit" name="eliminar_nino" class="btn btn-sm btn-danger">Eliminar</button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endwhile; ?>

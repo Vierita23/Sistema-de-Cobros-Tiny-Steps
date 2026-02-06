@@ -6,7 +6,18 @@ requirePadre();
 $conn = getDBConnection();
 $user_id = $_SESSION['user_id'];
 
-// Obtener estadísticas del usuario
+// Obtener mes y año seleccionados (por defecto mes actual)
+$mes_seleccionado = isset($_GET['mes']) ? (int)$_GET['mes'] : (int)date('n');
+$anio_seleccionado = isset($_GET['anio']) ? (int)$_GET['anio'] : (int)date('Y');
+
+// Nombres de los meses
+$meses = [
+    1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+    5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+    9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre'
+];
+
+// Obtener estadísticas generales del usuario (totales de todos los tiempos)
 $stats_query = $conn->query("SELECT 
     COUNT(*) as total_pagos,
     SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes,
@@ -15,6 +26,37 @@ $stats_query = $conn->query("SELECT
     SUM(CASE WHEN estado = 'aceptado' THEN monto ELSE 0 END) as total_pagado
     FROM pagos WHERE usuario_id = $user_id");
 $stats = $stats_query->fetch_assoc();
+
+// Obtener estadísticas del mes seleccionado
+$stats_mes_query = $conn->query("SELECT 
+    COUNT(*) as total_pagos_mes,
+    SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes_mes,
+    SUM(CASE WHEN estado = 'aceptado' THEN 1 ELSE 0 END) as aceptados_mes,
+    SUM(CASE WHEN estado = 'rechazado' THEN 1 ELSE 0 END) as rechazados_mes,
+    SUM(CASE WHEN estado = 'aceptado' THEN monto ELSE 0 END) as total_pagado_mes
+    FROM pagos 
+    WHERE usuario_id = $user_id 
+    AND mes_pago = '" . $mes_seleccionado . "' 
+    AND anio_pago = " . $anio_seleccionado);
+$stats_mes = $stats_mes_query->fetch_assoc();
+
+// Obtener años disponibles (años en los que el usuario tiene pagos)
+$anios_result = $conn->query("SELECT DISTINCT anio_pago FROM pagos WHERE usuario_id = $user_id ORDER BY anio_pago DESC");
+$anios_array = [];
+while ($row = $anios_result->fetch_assoc()) {
+    $anios_array[] = (int)$row['anio_pago'];
+}
+// Obtener año actual
+$anio_actual = (int)date('Y');
+$anio_maximo = 2040;
+// Agregar año actual y años futuros hasta 2040 si no están en la lista
+for ($anio = $anio_actual; $anio <= $anio_maximo; $anio++) {
+    if (!in_array($anio, $anios_array)) {
+        $anios_array[] = $anio;
+    }
+}
+// Ordenar de forma descendente (más reciente primero)
+rsort($anios_array);
 
 // Obtener niños del usuario
 $ninos_query = $conn->query("SELECT id, nombre FROM ninos WHERE usuario_id = $user_id AND activo = 1");
@@ -269,8 +311,61 @@ $conn->close();
         <div class="main-content">
             <!-- Hero Section -->
             <div class="hero-section">
-                <div class="hero-title">¡Hola, <?php echo htmlspecialchars($_SESSION['user_name']); ?>! 👋</div>
-                <div class="hero-subtitle">Bienvenido a tu panel de control. Aquí puedes gestionar tus pagos y ver el estado de tus transacciones.</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+                    <div>
+                        <div class="hero-title">¡Hola, <?php echo htmlspecialchars($_SESSION['user_name']); ?>! 👋</div>
+                        <div class="hero-subtitle">Bienvenido a tu panel de control. Aquí puedes gestionar tus pagos y ver el estado de tus transacciones.</div>
+                    </div>
+                    <div style="text-align: right; background: rgba(255,255,255,0.12); padding: 12px 20px; border-radius: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+                        <div id="fecha-actual" style="font-size: 0.95em; font-weight: 500; opacity: 0.95; margin-bottom: 4px;">
+                            <?php 
+                            setlocale(LC_TIME, 'es_ES.UTF-8', 'es_ES', 'spanish');
+                            $fecha_completa = strftime('%A, %d de %B de %Y', time());
+                            echo ucfirst($fecha_completa);
+                            ?>
+                        </div>
+                        <div id="hora-actual" style="font-size: 1.1em; font-weight: 600; opacity: 1;">
+                            <?php echo date('H:i:s'); ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filtro de Mes/Año para Pagos -->
+            <div class="card" style="margin-bottom: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div style="padding: 25px;">
+                    <h2 style="margin: 0 0 20px 0; color: white; font-size: 1.5em;">📅 Ver Mis Pagos por Mes</h2>
+                    <form method="GET" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; opacity: 0.9;">Mes:</label>
+                            <select name="mes" style="width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 1em; background: white; color: #333;" onchange="this.form.submit()">
+                                <?php for ($i = 1; $i <= 12; $i++): ?>
+                                    <option value="<?php echo $i; ?>" <?php echo $mes_seleccionado == $i ? 'selected' : ''; ?>>
+                                        <?php echo $meses[$i]; ?>
+                                    </option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; opacity: 0.9;">Año:</label>
+                            <select name="anio" style="width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 1em; background: white; color: #333;" onchange="this.form.submit()">
+                                <?php foreach ($anios_array as $anio): ?>
+                                    <option value="<?php echo $anio; ?>" <?php echo $anio_seleccionado == $anio ? 'selected' : ''; ?>>
+                                        <?php echo $anio; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: flex-end; gap: 10px;">
+                            <button type="submit" class="btn" style="background: white; color: #667eea; padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                                🔍 Filtrar
+                            </button>
+                            <a href="dashboard.php" class="btn" style="background: rgba(255,255,255,0.2); color: white; padding: 12px 24px; border: 2px solid white; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-block;">
+                                📊 Ver Todo
+                            </a>
+                        </div>
+                    </form>
+                </div>
             </div>
             
             <!-- Estadísticas -->
@@ -279,32 +374,44 @@ $conn->close();
                     <div class="stat-header">
                         <div class="stat-icon-wrapper primary">📊</div>
                     </div>
-                    <div class="stat-value"><?php echo $stats['total_pagos'] ?? 0; ?></div>
-                    <div class="stat-label">Total de Pagos</div>
+                    <div class="stat-value"><?php echo $stats_mes['total_pagos_mes'] ?? 0; ?></div>
+                    <div class="stat-label">Pagos (<?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>)</div>
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid rgba(0,0,0,0.1); font-size: 0.9em; opacity: 0.8;">
+                        <strong>Total:</strong> <?php echo $stats['total_pagos'] ?? 0; ?> pagos
+                    </div>
                 </div>
                 
                 <div class="stat-card-premium card-warning" style="--stat-text-gradient: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);">
                     <div class="stat-header">
                         <div class="stat-icon-wrapper warning">⏳</div>
                     </div>
-                    <div class="stat-value"><?php echo $stats['pendientes'] ?? 0; ?></div>
-                    <div class="stat-label">Pendientes</div>
+                    <div class="stat-value"><?php echo $stats_mes['pendientes_mes'] ?? 0; ?></div>
+                    <div class="stat-label">Pendientes (<?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>)</div>
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid rgba(0,0,0,0.1); font-size: 0.9em; opacity: 0.8;">
+                        <strong>Total:</strong> <?php echo $stats['pendientes'] ?? 0; ?> pendientes
+                    </div>
                 </div>
                 
                 <div class="stat-card-premium card-success" style="--stat-text-gradient: linear-gradient(135deg, #10B981 0%, #059669 100%);">
                     <div class="stat-header">
                         <div class="stat-icon-wrapper success">✓</div>
                     </div>
-                    <div class="stat-value"><?php echo $stats['aceptados'] ?? 0; ?></div>
-                    <div class="stat-label">Aceptados</div>
+                    <div class="stat-value"><?php echo $stats_mes['aceptados_mes'] ?? 0; ?></div>
+                    <div class="stat-label">Aceptados (<?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>)</div>
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid rgba(0,0,0,0.1); font-size: 0.9em; opacity: 0.8;">
+                        <strong>Total:</strong> <?php echo $stats['aceptados'] ?? 0; ?> aceptados
+                    </div>
                 </div>
                 
                 <div class="stat-card-premium card-info" style="--stat-text-gradient: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);">
                     <div class="stat-header">
                         <div class="stat-icon-wrapper info">💰</div>
                     </div>
-                    <div class="stat-value" style="font-size: 2.5em;">$<?php echo number_format($stats['total_pagado'] ?? 0, 0); ?></div>
-                    <div class="stat-label">Total Pagado</div>
+                    <div class="stat-value" style="font-size: 2.5em;">$<?php echo number_format($stats_mes['total_pagado_mes'] ?? 0, 0); ?></div>
+                    <div class="stat-label">Total Pagado (<?php echo $meses[$mes_seleccionado] . ' ' . $anio_seleccionado; ?>)</div>
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid rgba(0,0,0,0.1); font-size: 0.9em; opacity: 0.8;">
+                        <strong>Total General:</strong> $<?php echo number_format($stats['total_pagado'] ?? 0, 2); ?>
+                    </div>
                 </div>
             </div>
             
@@ -380,6 +487,48 @@ $conn->close();
     </div>
     <script src="../assets/js/mobile-menu.js"></script>
     <script>
+        // Función para formatear fecha en español
+        function formatearFecha(fecha) {
+            const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+            const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                          'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+            
+            const diaSemana = dias[fecha.getDay()];
+            const dia = fecha.getDate();
+            const mes = meses[fecha.getMonth()];
+            const año = fecha.getFullYear();
+            
+            return diaSemana + ', ' + dia + ' de ' + mes + ' de ' + año;
+        }
+        
+        // Función para formatear hora
+        function formatearHora(fecha) {
+            const horas = String(fecha.getHours()).padStart(2, '0');
+            const minutos = String(fecha.getMinutes()).padStart(2, '0');
+            const segundos = String(fecha.getSeconds()).padStart(2, '0');
+            return horas + ':' + minutos + ':' + segundos;
+        }
+        
+        // Actualizar fecha y hora automáticamente
+        function actualizarFechaHora() {
+            const ahora = new Date();
+            const fechaElement = document.getElementById('fecha-actual');
+            const horaElement = document.getElementById('hora-actual');
+            
+            if (fechaElement) {
+                fechaElement.textContent = formatearFecha(ahora);
+            }
+            if (horaElement) {
+                horaElement.textContent = formatearHora(ahora);
+            }
+        }
+        
+        // Actualizar cada segundo
+        setInterval(actualizarFechaHora, 1000);
+        
+        // Actualizar inmediatamente al cargar
+        actualizarFechaHora();
+        
         // Animación de entrada
         document.addEventListener('DOMContentLoaded', function() {
             const cards = document.querySelectorAll('.stat-card-premium, .action-card');

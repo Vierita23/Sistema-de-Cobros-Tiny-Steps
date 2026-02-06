@@ -479,6 +479,22 @@ body.login-page::after {
     box-shadow: 0 8px 25px rgba(107, 114, 128, 0.4);
 }
 
+.btn-danger {
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+    color: var(--white);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #DC2626 0%, #EF4444 100%);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
+}
+
+.btn-danger:active {
+    transform: translateY(-1px);
+}
+
 .btn-block {
     width: 100%;
     display: block;
