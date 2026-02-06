@@ -1,0 +1,20 @@
+INSTRUCCIONES PARA EL TÚNEL PÚBLICO
+=====================================
+
+LINK PÚBLICO: https://gold-facts-feel.loca.lt/Sistema%20de%20Cobros%20Tiny%20Steps/
+
+SOLUCIÓN RÁPIDA:
+1. En la página de advertencia, simplemente haz clic en "Click to Submit"
+2. Si te pide contraseña y no la configuraste, déjala vacía y haz clic
+3. Deberías poder acceder al sistema
+
+SI QUIERES USAR UNA CONTRASENA:
+1. Detén el túnel actual (Ctrl+C en la terminal)
+2. Ejecuta: lt --port 80 --subdomain gold-facts-feel
+3. Cuando te pida contraseña, ingresa la que quieras
+4. Comparte esa contraseña con quien necesite acceder
+
+IMPORTANTE:
+- Mantén la terminal abierta mientras uses el link
+- El link es temporal
+- Si cierras la terminal, el link dejará de funcionar

@@ -1,0 +1,44 @@
+═══════════════════════════════════════════════════════
+   🔗 LINK PÚBLICO DEL SISTEMA - LISTO PARA COMPARTIR
+═══════════════════════════════════════════════════════
+
+✅ LINK ACTUAL (FUNCIONANDO):
+https://sharp-rings-check.loca.lt/Sistema%20de%20Cobros%20Tiny%20Steps/
+
+📋 LINK ALTERNATIVO:
+https://sharp-rings-check.loca.lt/Sistema de Cobros Tiny Steps/
+
+═══════════════════════════════════════════════════════
+   📝 INSTRUCCIONES DE ACCESO
+═══════════════════════════════════════════════════════
+
+1. Abre el link en tu navegador
+2. Si aparece una página de advertencia de LocalTunnel:
+   → Haz clic en "Click to Submit" (puedes dejar la contraseña vacía)
+3. Verás la página de login del sistema
+
+═══════════════════════════════════════════════════════
+   🔑 CREDENCIALES DE ACCESO
+═══════════════════════════════════════════════════════
+
+👤 Administrador:
+   Email: admin@tinysteps.com
+   Contraseña: tinyvicentina789
+
+═══════════════════════════════════════════════════════
+   ⚠️ IMPORTANTE
+═══════════════════════════════════════════════════════
+
+✅ MANTÉN LA TERMINAL ABIERTA
+   - No cierres la terminal donde está corriendo "lt --port 80"
+   - Si la cierras, el link dejará de funcionar
+
+⚠️ LINK TEMPORAL
+   - Este link cambia cada vez que reinicias el túnel
+   - Si reinicias, obtendrás un nuevo link
+
+📤 COMPARTIR
+   - Puedes compartir este link con quien necesites
+   - Asegúrate de que la terminal esté abierta
+
+═══════════════════════════════════════════════════════

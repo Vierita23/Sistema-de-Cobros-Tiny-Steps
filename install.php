@@ -25,9 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $conn->select_db($db_name);
         
         // Leer y ejecutar el archivo SQL
-        $sql_file = __DIR__ . '/database.sql';
+        $sql_file = __DIR__ . '/database/database.sql';
         if (!file_exists($sql_file)) {
-            throw new Exception("No se encontró el archivo database.sql");
+            throw new Exception("No se encontró el archivo database/database.sql");
         }
         
         $sql = file_get_contents($sql_file);

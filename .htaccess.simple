@@ -1,0 +1,11 @@
+# Versión simplificada de .htaccess
+# Usa este archivo si el .htaccess completo causa problemas
+
+# Prevenir listado de directorios
+Options -Indexes
+
+# Proteger archivos sensibles (versión simple)
+<FilesMatch "\.(sql|log)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

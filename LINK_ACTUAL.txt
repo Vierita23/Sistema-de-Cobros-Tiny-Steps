@@ -1,0 +1,31 @@
+═══════════════════════════════════════════════════════
+   LINK PÚBLICO ACTUAL DEL SISTEMA
+═══════════════════════════════════════════════════════
+
+🌐 LINK PRINCIPAL:
+https://sharp-rings-check.loca.lt/Sistema%20de%20Cobros%20Tiny%20Steps/
+
+📋 LINK ALTERNATIVO (sin codificar espacios):
+https://sharp-rings-check.loca.lt/Sistema de Cobros Tiny Steps/
+
+═══════════════════════════════════════════════════════
+   INSTRUCCIONES IMPORTANTES
+═══════════════════════════════════════════════════════
+
+✅ MANTÉN LA TERMINAL ABIERTA
+   - No cierres la terminal donde está corriendo LocalTunnel
+   - Si la cierras, el link dejará de funcionar
+
+⚠️ LINK TEMPORAL
+   - Este link cambia cada vez que reinicias el túnel
+   - Si reinicias, obtendrás un nuevo link
+
+🔒 SEGURIDAD
+   - Puede aparecer una página de advertencia
+   - Simplemente haz clic en "Click to Submit" para continuar
+
+📤 COMPARTIR
+   - Puedes compartir este link con quien necesites
+   - Asegúrate de que la terminal esté abierta cuando lo compartas
+
+═══════════════════════════════════════════════════════

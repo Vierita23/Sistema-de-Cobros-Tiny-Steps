@@ -1,0 +1,10 @@
+# Sistema de Cobros Tiny Steps - Configuración Simplificada
+
+# Prevenir listado de directorios
+Options -Indexes
+
+# Proteger archivos sensibles
+<FilesMatch "\.(sql|log)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

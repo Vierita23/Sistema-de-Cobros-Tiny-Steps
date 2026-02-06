@@ -1,0 +1,12 @@
+LINK PÚBLICO DEL SISTEMA:
+
+https://open-peaches-jam.loca.lt/Sistema%20de%20Cobros%20Tiny%20Steps/
+
+O también puedes usar:
+
+https://open-peaches-jam.loca.lt/Sistema de Cobros Tiny Steps/
+
+IMPORTANTE:
+- Mantén la terminal con LocalTunnel abierta
+- El link es temporal (cambia cada vez que reinicias el túnel)
+- Comparte este link con quien necesites
