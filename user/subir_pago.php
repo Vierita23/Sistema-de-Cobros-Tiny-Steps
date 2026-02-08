@@ -1,127 +1,75 @@
 <?php
-require_once '../config/database.php';
-require_once '../config/session.php';
-requirePadre();
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
-$conn = getDBConnection();
-$user_id = $_SESSION['user_id'];
-$mensaje = '';
-$error = '';
-
-// Información de cuentas bancarias
-$cuentas_bancarias = [
-    'Pichincha' => [
-        'nombre' => 'Mutualista Pichincha',
-        'tipo' => 'Ahorros',
-        'numero' => '20622558',
-        'color' => '#E65100',
-        'gradient' => 'linear-gradient(135deg, #FF6F00 0%, #E65100 100%)'
-    ],
-    'Bolivariano' => [
-        'nombre' => 'Banco Bolivariano',
-        'tipo' => 'Ahorros',
-        'numero' => '5001700105',
-        'color' => '#1565C0',
-        'gradient' => 'linear-gradient(135deg, #1976D2 0%, #1565C0 100%)'
-    ]
-];
-
-// Obtener niños del usuario
-$ninos_query = $conn->query("SELECT id, nombre FROM ninos WHERE usuario_id = $user_id AND activo = 1 ORDER BY nombre");
-$ninos = [];
-while ($row = $ninos_query->fetch_assoc()) {
-    $ninos[] = $row;
+// POST aquí = formulario enviado a esta URL por error. Redirigir sin tocar sesión (evita 500)
+if (!empty($_POST['subir_pago'])) {
+    header('Location: subir_pago.php');
+    exit;
 }
 
-// Procesar formulario
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['subir_pago'])) {
-    $nino_id = $_POST['nino_id'] ?? '';
-    $monto = $_POST['monto'] ?? '';
-    $mes_pago = date('F'); // Mes actual automático
-    $anio_pago = $_POST['anio_pago'] ?? '';
-    $cuenta_destino = $_POST['cuenta_destino'] ?? ''; // Nueva variable para cuenta destino
-    $es_deposito = isset($_POST['es_deposito']) ? 1 : 0;
-    $numero_comprobante = $_POST['numero_comprobante'] ?? '';
-    $fecha_transaccion = $_POST['fecha_transaccion'] ?? '';
-    $motivo_pago = $_POST['motivo_pago'] ?? '';
-    $descripcion = $_POST['descripcion'] ?? '';
-    
-    // Convertir mes numérico a nombre
-    $meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    $mes_pago = $meses[date('n')];
-    
-    // Validaciones
-    if (empty($nino_id) || empty($monto) || empty($anio_pago) || empty($cuenta_destino)) {
-        $error = 'Por favor completa todos los campos obligatorios';
-    } elseif (!is_numeric($monto) || $monto <= 0) {
-        $error = 'El monto debe ser un número válido mayor a 0';
-    } elseif (!is_numeric($anio_pago) || $anio_pago < 2020 || $anio_pago > 2100) {
-        $error = 'El año debe ser válido';
-    } else {
-        // Procesar archivo de comprobante
-        $comprobante_path = null;
-        if (isset($_FILES['comprobante']) && $_FILES['comprobante']['error'] === UPLOAD_ERR_OK) {
-            $upload_dir = '../uploads/comprobantes/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
+// Ante error fatal, mostrar algo en lugar de pantalla en blanco
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (ob_get_level()) ob_end_clean();
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Error</title></head><body style="font-family:sans-serif;padding:20px;background:#fff3f3;">';
+        echo '<h1>Error</h1><p>' . htmlspecialchars($e['message']) . '</p><p><a href="dashboard.php">Volver al inicio</a></p></body></html>';
+    }
+});
+
+$mensaje = '';
+$error = '';
+$conn_cerrada = false;
+$conn = null;
+$user_id = 0;
+$ninos = [];
+$cuentas_bancarias = [
+    'Pichincha' => ['nombre' => 'Mutualista Pichincha', 'tipo' => 'Ahorros', 'numero' => '20622558', 'color' => '#E65100', 'gradient' => 'linear-gradient(135deg, #FF6F00 0%, #E65100 100%)'],
+    'Bolivariano' => ['nombre' => 'Banco Bolivariano', 'tipo' => 'Ahorros', 'numero' => '5001700105', 'color' => '#1565C0', 'gradient' => 'linear-gradient(135deg, #1976D2 0%, #1565C0 100%)']
+];
+
+try {
+    require_once __DIR__ . '/../config/database.php';
+    require_once __DIR__ . '/../config/session.php';
+    requirePadre();
+
+    $conn = getDBConnection();
+    $user_id = $_SESSION['user_id'];
+
+    // Mensajes desde procesar_pago.php
+    if (isset($_SESSION['mensaje_exito'])) {
+        $mensaje = '<div class="alert alert-success">' . htmlspecialchars($_SESSION['mensaje_exito']) . '</div>';
+        unset($_SESSION['mensaje_exito']);
+    }
+    if (isset($_SESSION['error_pago'])) {
+        $error = $_SESSION['error_pago'];
+        unset($_SESSION['error_pago']);
+    }
+} catch (Throwable $e) {
+    $error = 'Error: ' . $e->getMessage();
+    $ninos = [];
+    if (isset($_SESSION['user_id'])) $user_id = $_SESSION['user_id'];
+}
+
+// Obtener niños del usuario (solo si hay conexión)
+if ($conn) {
+    try {
+        $ninos_query = $conn->query("SELECT id, nombre FROM ninos WHERE usuario_id = " . (int)$user_id . " AND activo = 1 ORDER BY nombre");
+        if ($ninos_query) {
+            while ($row = $ninos_query->fetch_assoc()) {
+                $ninos[] = $row;
             }
-            
-            $file_extension = strtolower(pathinfo($_FILES['comprobante']['name'], PATHINFO_EXTENSION));
-            $allowed_extensions = ['jpg', 'jpeg', 'png', 'pdf'];
-            
-            if (in_array($file_extension, $allowed_extensions)) {
-                $file_name = 'pago_' . $user_id . '_' . time() . '_' . uniqid() . '.' . $file_extension;
-                $file_path = $upload_dir . $file_name;
-                
-                if (move_uploaded_file($_FILES['comprobante']['tmp_name'], $file_path)) {
-                    $comprobante_path = 'uploads/comprobantes/' . $file_name;
-                } else {
-                    $error = 'Error al subir el comprobante';
-                }
-            } else {
-                $error = 'Formato de archivo no permitido. Use: JPG, PNG o PDF';
-            }
+        } else {
+            if (empty($error)) $error = 'Error al cargar la lista de niños.';
         }
-        
-        if (empty($error)) {
-            // Usar cuenta_destino como cuenta_bancaria en la base de datos
-            $cuenta_bancaria = $cuenta_destino;
-            
-            // Insertar pago en la base de datos
-            $stmt = $conn->prepare("INSERT INTO pagos (nino_id, usuario_id, monto, mes_pago, anio_pago, cuenta_bancaria, es_deposito, numero_comprobante, fecha_transaccion, motivo_pago, descripcion, comprobante_path, estado) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')");
-            
-            $fecha_transaccion_formatted = !empty($fecha_transaccion) ? $fecha_transaccion : null;
-            
-            $stmt->bind_param("iidssissssss", 
-                $nino_id, 
-                $user_id, 
-                $monto, 
-                $mes_pago, 
-                $anio_pago, 
-                $cuenta_bancaria, 
-                $es_deposito, 
-                $numero_comprobante, 
-                $fecha_transaccion_formatted, 
-                $motivo_pago, 
-                $descripcion, 
-                $comprobante_path
-            );
-            
-            if ($stmt->execute()) {
-                $mensaje = '<div class="alert alert-success">✅ Pago registrado exitosamente. Será revisado por el administrador.</div>';
-                // Limpiar formulario
-                $_POST = [];
-                $cuenta_destino = '';
-            } else {
-                $error = 'Error al registrar el pago: ' . $conn->error;
-            }
-            $stmt->close();
-        }
+    } catch (Throwable $e) {
+        if (empty($error)) $error = $e->getMessage();
     }
 }
 
-$conn->close();
+// El formulario se envía a procesar_pago.php, que redirige aquí con mensaje en sesión.
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -331,7 +279,7 @@ $conn->close();
             <div class="header">
                 <h1>💳 Subir Nuevo Pago</h1>
                 <div class="user-info">
-                    <span>Bienvenido, <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
+                    <span>Bienvenido, <?php echo htmlspecialchars(isset($_SESSION['user_name']) ? $_SESSION['user_name'] : ''); ?></span>
                     <a href="../logout.php" class="logout-btn">Cerrar Sesión</a>
                 </div>
             </div>
@@ -389,7 +337,7 @@ $conn->close();
                         <input type="hidden" name="cuenta_destino" id="cuenta_destino" value="<?php echo htmlspecialchars($_POST['cuenta_destino'] ?? ''); ?>" required>
                     </div>
                     
-                    <form method="POST" enctype="multipart/form-data" id="paymentForm">
+                    <form method="POST" action="procesar_pago.php" enctype="multipart/form-data" id="paymentForm" data-action="procesar_pago.php">
                         <input type="hidden" name="cuenta_destino" id="cuenta_destino_input" value="<?php echo htmlspecialchars($_POST['cuenta_destino'] ?? ''); ?>" required>
                         
                         <!-- Información del Pago -->
@@ -491,6 +439,7 @@ $conn->close();
             <?php endif; ?>
         </div>
     </div>
+    <?php if (!$conn_cerrada && isset($conn) && $conn): $conn->close(); endif; ?>
     <script src="../assets/js/mobile-menu.js"></script>
     <script>
         const cuentasBancarias = <?php echo json_encode($cuentas_bancarias); ?>;
@@ -498,6 +447,11 @@ $conn->close();
         const selectedBankInfo = document.getElementById('selectedBankInfo');
         const cuentaDestinoInput = document.getElementById('cuenta_destino_input');
         const paymentForm = document.getElementById('paymentForm');
+        
+        // Forzar que el envío vaya siempre a procesar_pago.php (evita 500 por caché)
+        var formAction = paymentForm.getAttribute('data-action') || 'procesar_pago.php';
+        paymentForm.setAttribute('action', formAction);
+        paymentForm.addEventListener('submit', function() { paymentForm.action = formAction; }, true);
         
         // Selección de banco
         bankCards.forEach(card => {
@@ -570,6 +524,7 @@ $conn->close();
         
         // Validación del formulario
         paymentForm.addEventListener('submit', function(e) {
+            paymentForm.action = formAction;
             if (!cuentaDestinoInput.value) {
                 e.preventDefault();
                 alert('Por favor selecciona la cuenta de destino');
